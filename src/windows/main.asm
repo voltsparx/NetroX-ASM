@@ -39,7 +39,7 @@ extern ExitProcess
 %define OUTPUT_FLUSH_THRESHOLD 98304
 
 SECTION .data
-usage_msg db "Usage: netx-asm.exe <target_ip> [-p port|start-end|-] [--rate N]", 13, 10
+usage_msg db "Usage: netx-asm.exe <target_ip> [-p port|start-end|-] [--rate N] [--scan MODE] [--stabilize]", 13, 10
 usage_len equ $-usage_msg
 banner_msg db "   _  __    __           ___   ______  ___", 13, 10
            db "  / |/ /__ / /___ ______/ _ | / __/  |/  /", 13, 10
@@ -99,8 +99,11 @@ last_win resw 1
 result_map resb 8192
 open_count resd 1
 engine_id resb 1
+scan_mode resb 1
 rate_value resd 1
 rate_cycles resq 1
+rate_min_cycles resq 1
+rate_max_cycles resq 1
 rate_enabled resb 1
 last_send_tsc resq 1
 tsc_hz resq 1
@@ -108,6 +111,10 @@ qpc_freq resq 1
 qpc_start resq 1
 qpc_end resq 1
 tsc_start resq 1
+stab_enabled resb 1
+stab_sent resd 1
+stab_recv resd 1
+stab_timeout resd 1
 
 SECTION .text
 _start:
@@ -189,19 +196,19 @@ _start:
 
 .check_rate:
     cmp byte [rsi], '-'
-    jne .arg_next
+    jne .check_scan
     cmp byte [rsi+1], '-'
-    jne .arg_next
+    jne .check_scan
     cmp byte [rsi+2], 'r'
-    jne .arg_next
+    jne .check_scan
     cmp byte [rsi+3], 'a'
-    jne .arg_next
+    jne .check_scan
     cmp byte [rsi+4], 't'
-    jne .arg_next
+    jne .check_scan
     cmp byte [rsi+5], 'e'
-    jne .arg_next
+    jne .check_scan
     cmp byte [rsi+6], 0
-    jne .arg_next
+    jne .check_scan
     mov rdi, rdx
     call next_token
     test rax, rax
@@ -213,6 +220,60 @@ _start:
     mov [rate_value], eax
     jmp .arg_next
 
+.check_scan:
+    cmp byte [rsi], '-'
+    jne .check_stabilize
+    cmp byte [rsi+1], '-'
+    jne .check_stabilize
+    cmp byte [rsi+2], 's'
+    jne .check_stabilize
+    cmp byte [rsi+3], 'c'
+    jne .check_stabilize
+    cmp byte [rsi+4], 'a'
+    jne .check_stabilize
+    cmp byte [rsi+5], 'n'
+    jne .check_stabilize
+    cmp byte [rsi+6], 0
+    jne .check_stabilize
+    mov rdi, rdx
+    call next_token
+    test rax, rax
+    jz .usage
+    mov rdi, rax
+    call parse_scan_mode
+    test al, al
+    jz .usage
+    mov [scan_mode], al
+    jmp .arg_next
+
+.check_stabilize:
+    cmp byte [rsi], '-'
+    jne .arg_next
+    cmp byte [rsi+1], '-'
+    jne .arg_next
+    cmp byte [rsi+2], 's'
+    jne .arg_next
+    cmp byte [rsi+3], 't'
+    jne .arg_next
+    cmp byte [rsi+4], 'a'
+    jne .arg_next
+    cmp byte [rsi+5], 'b'
+    jne .arg_next
+    cmp byte [rsi+6], 'i'
+    jne .arg_next
+    cmp byte [rsi+7], 'l'
+    jne .arg_next
+    cmp byte [rsi+8], 'i'
+    jne .arg_next
+    cmp byte [rsi+9], 'z'
+    jne .arg_next
+    cmp byte [rsi+10], 'e'
+    jne .arg_next
+    cmp byte [rsi+11], 0
+    jne .arg_next
+    mov byte [stab_enabled], 1
+    jmp .arg_next
+
 .arg_next:
     mov rdi, rdx
     jmp .arg_loop
@@ -222,6 +283,7 @@ _start:
     xchg al, ah
     mov [src_port_be], ax
     mov byte [engine_id], ENGINE_SYN
+    mov byte [scan_mode], SCAN_SYN
     lea rsi, [banner_msg]
     mov edx, banner_len
     call buf_write
@@ -294,6 +356,11 @@ _start:
     add rsp, 56
     cmp eax, SOCKET_ERROR
     je .error
+    cmp byte [stab_enabled], 0
+    je .after_sent
+    inc dword [stab_sent]
+
+.after_sent:
 
     sub rsp, 56
     mov rcx, [sock_fd]
@@ -332,6 +399,25 @@ _start:
     mov [last_win], ax
     mov al, [rdx+13]
     mov bl, al
+    mov dl, [scan_mode]
+    cmp dl, SCAN_SYN
+    je .classify_syn
+    cmp dl, SCAN_ACK
+    je .classify_ack
+    cmp dl, SCAN_WINDOW
+    je .classify_ack
+
+.classify_flag:
+    test bl, 0x04
+    jnz .report_closed
+    jmp .report_filtered
+
+.classify_ack:
+    test bl, 0x04
+    jnz .report_open
+    jmp .report_filtered
+
+.classify_syn:
     and bl, 0x12
     cmp bl, 0x12
     je .report_open
@@ -341,11 +427,21 @@ _start:
 
 .report_open:
     call record_open
+    cmp byte [stab_enabled], 0
+    je .open_no_stab
+    inc dword [stab_recv]
+
+.open_no_stab:
     mov ax, cx
     call write_open_intel
     jmp .next_port
 
 .report_closed:
+    cmp byte [stab_enabled], 0
+    je .closed_no_stab
+    inc dword [stab_recv]
+
+.closed_no_stab:
     mov ax, cx
     mov r9, closed_msg
     mov r10d, closed_len
@@ -353,6 +449,11 @@ _start:
     jmp .next_port
 
 .report_filtered:
+    cmp byte [stab_enabled], 0
+    je .filtered_no_stab
+    inc dword [stab_timeout]
+
+.filtered_no_stab:
     mov ax, cx
     mov r9, filtered_msg
     mov r10d, filtered_len
@@ -360,6 +461,7 @@ _start:
     jmp .next_port
 
 .next_port:
+    call stabilize_step
     inc ecx
     jmp .scan_loop
 
@@ -599,10 +701,90 @@ rate_gate:
 .rate_done:
     ret
 
+stabilize_step:
+    cmp byte [stab_enabled], 0
+    je .stab_done
+    cmp byte [rate_enabled], 0
+    je .stab_done
+    push rcx
+    mov eax, [stab_sent]
+    test eax, eax
+    jz .stab_restore
+    xor edx, edx
+    mov ecx, 128
+    div ecx
+    test edx, edx
+    jne .stab_restore
+    mov eax, [stab_timeout]
+    mov ecx, [stab_recv]
+    lea edx, [ecx*2]
+    cmp eax, edx
+    ja .stab_slow
+    lea edx, [eax*2]
+    cmp ecx, edx
+    ja .stab_fast
+    jmp .stab_reset
+
+.stab_slow:
+    call slow_down
+    jmp .stab_reset
+
+.stab_fast:
+    call speed_up
+
+.stab_reset:
+    mov dword [stab_sent], 0
+    mov dword [stab_recv], 0
+    mov dword [stab_timeout], 0
+
+.stab_restore:
+    pop rcx
+
+.stab_done:
+    ret
+
+slow_down:
+    mov rax, [rate_cycles]
+    mov rcx, rax
+    shr rcx, 2
+    add rax, rcx
+    mov rdx, [rate_max_cycles]
+    test rdx, rdx
+    jz .slow_store
+    cmp rax, rdx
+    jbe .slow_store
+    mov rax, rdx
+
+.slow_store:
+    mov [rate_cycles], rax
+    ret
+
+speed_up:
+    mov rax, [rate_cycles]
+    mov rcx, rax
+    shr rcx, 3
+    sub rax, rcx
+    mov rdx, [rate_min_cycles]
+    test rdx, rdx
+    jz .fast_store
+    cmp rax, rdx
+    jae .fast_store
+    mov rax, rdx
+
+.fast_store:
+    mov [rate_cycles], rax
+    ret
+
 init_rate:
     mov eax, [rate_value]
     test eax, eax
-    jz .init_rate_done
+    jnz .init_rate_do
+    cmp byte [stab_enabled], 0
+    je .init_rate_done
+    mov dword [rate_value], 200000
+    mov eax, [rate_value]
+
+.init_rate_do:
     call calibrate_tsc
     mov ecx, [rate_value]
     mov rax, [tsc_hz]
@@ -610,6 +792,15 @@ init_rate:
     div rcx
     mov [rate_cycles], rax
     mov byte [rate_enabled], 1
+    cmp byte [stab_enabled], 0
+    je .init_rate_done
+    mov rax, [rate_cycles]
+    mov rcx, rax
+    shl rcx, 2
+    mov [rate_max_cycles], rcx
+    mov rcx, rax
+    shr rcx, 2
+    mov [rate_min_cycles], rcx
 
 .init_rate_done:
     ret

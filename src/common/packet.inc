@@ -1,6 +1,8 @@
 %ifndef PACKET_INC
 %define PACKET_INC 1
 
+%include "scan.inc"
+
 ; init_packet_template
 ; uses packet_buf, source_ip, target_ip, src_port_be
 init_packet_template:
@@ -43,6 +45,46 @@ build_syn_packet:
     mov ax, [dst_port_be]
     mov [packet_buf+22], ax
     mov [sockaddr_dst+2], ax
+    mov bl, 0x02
+    mov al, [scan_mode]
+    cmp al, SCAN_SYN
+    je .flags_ready
+    cmp al, SCAN_ACK
+    jne .check_fin
+    mov bl, 0x10
+    jmp .flags_ready
+
+.check_fin:
+    cmp al, SCAN_FIN
+    jne .check_null
+    mov bl, 0x01
+    jmp .flags_ready
+
+.check_null:
+    cmp al, SCAN_NULL
+    jne .check_xmas
+    mov bl, 0x00
+    jmp .flags_ready
+
+.check_xmas:
+    cmp al, SCAN_XMAS
+    jne .check_window
+    mov bl, 0x29
+    jmp .flags_ready
+
+.check_window:
+    cmp al, SCAN_WINDOW
+    jne .check_maimon
+    mov bl, 0x10
+    jmp .flags_ready
+
+.check_maimon:
+    cmp al, SCAN_MAIMON
+    jne .flags_ready
+    mov bl, 0x11
+
+.flags_ready:
+    mov [packet_buf+33], bl
     mov word [packet_buf+36], 0
     lea rdi, [packet_buf]
     call tcp_checksum

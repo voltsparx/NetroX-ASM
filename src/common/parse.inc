@@ -1,6 +1,8 @@
 ; parse_ip
 ; rdi -> null-terminated IPv4 string
 ; returns eax = host-order IPv4, or 0 on error
+%include "scan.inc"
+
 parse_ip:
     push rbx
     xor eax, eax
@@ -184,6 +186,123 @@ parse_u32:
     ret
 
 .parse_u32_invalid:
+    xor eax, eax
+    pop rbx
+    ret
+
+; parse_scan_mode
+; rdi -> null-terminated mode string
+; returns al = scan mode, or 0 on error
+parse_scan_mode:
+    push rbx
+    mov al, [rdi]
+    cmp al, 's'
+    jne .scan_ack
+    cmp byte [rdi+1], 'y'
+    jne .scan_ack
+    cmp byte [rdi+2], 'n'
+    jne .scan_ack
+    cmp byte [rdi+3], 0
+    jne .scan_ack
+    mov al, SCAN_SYN
+    pop rbx
+    ret
+
+.scan_ack:
+    cmp al, 'a'
+    jne .scan_fin
+    cmp byte [rdi+1], 'c'
+    jne .scan_fin
+    cmp byte [rdi+2], 'k'
+    jne .scan_fin
+    cmp byte [rdi+3], 0
+    jne .scan_fin
+    mov al, SCAN_ACK
+    pop rbx
+    ret
+
+.scan_fin:
+    cmp al, 'f'
+    jne .scan_null
+    cmp byte [rdi+1], 'i'
+    jne .scan_null
+    cmp byte [rdi+2], 'n'
+    jne .scan_null
+    cmp byte [rdi+3], 0
+    jne .scan_null
+    mov al, SCAN_FIN
+    pop rbx
+    ret
+
+.scan_null:
+    cmp al, 'n'
+    jne .scan_xmas
+    cmp byte [rdi+1], 'u'
+    jne .scan_xmas
+    cmp byte [rdi+2], 'l'
+    jne .scan_xmas
+    cmp byte [rdi+3], 'l'
+    jne .scan_xmas
+    cmp byte [rdi+4], 0
+    jne .scan_xmas
+    mov al, SCAN_NULL
+    pop rbx
+    ret
+
+.scan_xmas:
+    cmp al, 'x'
+    jne .scan_window
+    cmp byte [rdi+1], 'm'
+    jne .scan_window
+    cmp byte [rdi+2], 'a'
+    jne .scan_window
+    cmp byte [rdi+3], 's'
+    jne .scan_window
+    cmp byte [rdi+4], 0
+    jne .scan_window
+    mov al, SCAN_XMAS
+    pop rbx
+    ret
+
+.scan_window:
+    cmp al, 'w'
+    jne .scan_maimon
+    cmp byte [rdi+1], 'i'
+    jne .scan_maimon
+    cmp byte [rdi+2], 'n'
+    jne .scan_maimon
+    cmp byte [rdi+3], 'd'
+    jne .scan_maimon
+    cmp byte [rdi+4], 'o'
+    jne .scan_maimon
+    cmp byte [rdi+5], 'w'
+    jne .scan_maimon
+    cmp byte [rdi+6], 0
+    jne .scan_maimon
+    mov al, SCAN_WINDOW
+    pop rbx
+    ret
+
+.scan_maimon:
+    cmp al, 'm'
+    jne .scan_invalid
+    cmp byte [rdi+1], 'a'
+    jne .scan_invalid
+    cmp byte [rdi+2], 'i'
+    jne .scan_invalid
+    cmp byte [rdi+3], 'm'
+    jne .scan_invalid
+    cmp byte [rdi+4], 'o'
+    jne .scan_invalid
+    cmp byte [rdi+5], 'n'
+    jne .scan_invalid
+    cmp byte [rdi+6], 0
+    jne .scan_invalid
+    mov al, SCAN_MAIMON
+    pop rbx
+    ret
+
+.scan_invalid:
     xor eax, eax
     pop rbx
     ret

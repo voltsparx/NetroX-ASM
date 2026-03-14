@@ -17,11 +17,11 @@ make windows
 ## Run
 
 ```sh
-sudo ./netx-asm-linux <target_ip> [-p port|start-end|-]
+sudo ./netx-asm <target_ip> [-p port|start-end|-] [--rate N] [--iface IFACE] [--scan MODE] [--stabilize]
 ```
 
 ```sh
-netx-asm.exe <target_ip> [-p port|start-end|-]
+netx-asm.exe <target_ip> [-p port|start-end|-] [--rate N] [--scan MODE] [--stabilize]
 ```
 
 ## Notes
@@ -35,4 +35,8 @@ netx-asm.exe <target_ip> [-p port|start-end|-]
 - Output is buffered (128KB) and flushed at ~75% to reduce syscall overhead.
 - End-of-scan summary prints open count and a list built from a bitfield map.
 - `--rate <N>` throttles packets/sec using an RDTSC-calibrated cycle budget.
+- `--stabilize` enables adaptive rate control (auto-baseline is 200k pps if `--rate` is not set).
+- `--scan MODE` supports: `syn`, `ack`, `fin`, `null`, `xmas`, `window`, `maimon` (TCP flag scans).
 - ASCII banner prints at startup.
+- Linux `--iface <name>` enables an `AF_PACKET` send engine (NIC verified, link-layer send). Windows stays on WinSock raw sockets for now.
+- The send loop routes through an `intelligence` gate (currently rate control) for future adaptive logic.

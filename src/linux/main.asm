@@ -11,7 +11,7 @@ GLOBAL _start
 %define OUTPUT_FLUSH_THRESHOLD 98304
 
 SECTION .data
-usage_msg db "Usage: netx-asm <target_ip> [-p port|start-end|-] [--rate N]", 10
+usage_msg db "Usage: netx-asm <target_ip> [-p port|start-end|-] [--rate N] [--iface IFACE] [--scan MODE] [--stabilize]", 10
 usage_len equ $-usage_msg
 banner_msg db "   _  __    __           ___   ______  ___", 10
            db "  / |/ /__ / /___ ______/ _ | / __/  |/  /", 10
@@ -59,8 +59,10 @@ output_pos resq 1
 sockaddr_dst resb 16
 sockaddr_tmp resb 16
 sockaddr_local resb 16
+sockaddr_ll resb 32
 addrlen resd 1
 raw_fd resq 1
+send_fd resq 1
 epoll_fd resq 1
 target_ip resd 1
 source_ip resd 1
@@ -71,14 +73,25 @@ epoll_out resb 16
 result_map resb 8192
 open_count resd 1
 engine_id resb 1
+scan_mode resb 1
 rate_value resd 1
 rate_cycles resq 1
+rate_min_cycles resq 1
+rate_max_cycles resq 1
 rate_enabled resb 1
 last_send_tsc resq 1
 tsc_hz resq 1
 ts_start resq 2
 ts_end resq 2
 tsc_start resq 1
+iface_name resb 16
+iface_set resb 1
+ifreq_buf resb 40
+ifindex resd 1
+stab_enabled resb 1
+stab_sent resd 1
+stab_recv resd 1
+stab_timeout resd 1
 
 SECTION .text
 _start:
@@ -130,19 +143,19 @@ _start:
 
 .check_rate:
     cmp byte [rdi], '-'
-    jne .arg_next
+    jne .check_iface
     cmp byte [rdi+1], '-'
-    jne .arg_next
+    jne .check_iface
     cmp byte [rdi+2], 'r'
-    jne .arg_next
+    jne .check_iface
     cmp byte [rdi+3], 'a'
-    jne .arg_next
+    jne .check_iface
     cmp byte [rdi+4], 't'
-    jne .arg_next
+    jne .check_iface
     cmp byte [rdi+5], 'e'
-    jne .arg_next
+    jne .check_iface
     cmp byte [rdi+6], 0
-    jne .arg_next
+    jne .check_iface
     inc rcx
     cmp rcx, r13
     jae .usage
@@ -151,6 +164,86 @@ _start:
     test eax, eax
     jz .usage
     mov [rate_value], eax
+    jmp .arg_next
+
+.check_iface:
+    cmp byte [rdi], '-'
+    jne .check_scan
+    cmp byte [rdi+1], '-'
+    jne .check_scan
+    cmp byte [rdi+2], 'i'
+    jne .check_scan
+    cmp byte [rdi+3], 'f'
+    jne .check_scan
+    cmp byte [rdi+4], 'a'
+    jne .check_scan
+    cmp byte [rdi+5], 'c'
+    jne .check_scan
+    cmp byte [rdi+6], 'e'
+    jne .check_scan
+    cmp byte [rdi+7], 0
+    jne .check_scan
+    inc rcx
+    cmp rcx, r13
+    jae .usage
+    mov rsi, [rbx+rcx*8]
+    call copy_iface_name
+    test eax, eax
+    jnz .usage
+    mov byte [iface_set], 1
+    jmp .arg_next
+
+.check_scan:
+    cmp byte [rdi], '-'
+    jne .check_stabilize
+    cmp byte [rdi+1], '-'
+    jne .check_stabilize
+    cmp byte [rdi+2], 's'
+    jne .check_stabilize
+    cmp byte [rdi+3], 'c'
+    jne .check_stabilize
+    cmp byte [rdi+4], 'a'
+    jne .check_stabilize
+    cmp byte [rdi+5], 'n'
+    jne .check_stabilize
+    cmp byte [rdi+6], 0
+    jne .check_stabilize
+    inc rcx
+    cmp rcx, r13
+    jae .usage
+    mov rdi, [rbx+rcx*8]
+    call parse_scan_mode
+    test al, al
+    jz .usage
+    mov [scan_mode], al
+    jmp .arg_next
+
+.check_stabilize:
+    cmp byte [rdi], '-'
+    jne .arg_next
+    cmp byte [rdi+1], '-'
+    jne .arg_next
+    cmp byte [rdi+2], 's'
+    jne .arg_next
+    cmp byte [rdi+3], 't'
+    jne .arg_next
+    cmp byte [rdi+4], 'a'
+    jne .arg_next
+    cmp byte [rdi+5], 'b'
+    jne .arg_next
+    cmp byte [rdi+6], 'i'
+    jne .arg_next
+    cmp byte [rdi+7], 'l'
+    jne .arg_next
+    cmp byte [rdi+8], 'i'
+    jne .arg_next
+    cmp byte [rdi+9], 'z'
+    jne .arg_next
+    cmp byte [rdi+10], 'e'
+    jne .arg_next
+    cmp byte [rdi+11], 0
+    jne .arg_next
+    mov byte [stab_enabled], 1
     jmp .arg_next
 
 .arg_next:
@@ -162,6 +255,7 @@ _start:
     xchg al, ah
     mov [src_port_be], ax
     mov byte [engine_id], ENGINE_SYN
+    mov byte [scan_mode], SCAN_SYN
     lea rsi, [banner_msg]
     mov edx, banner_len
     call buf_write
@@ -179,6 +273,11 @@ _start:
     syscall
     test rax, rax
     js .error
+    cmp byte [stab_enabled], 0
+    je .after_sent
+    inc dword [stab_sent]
+
+.after_sent:
     mov [raw_fd], rax
 
     mov rax, SYS_SETSOCKOPT
@@ -225,6 +324,9 @@ _start:
     mov word [sockaddr_dst], AF_INET
     mov eax, [target_ip]
     mov [sockaddr_dst+4], eax
+    call setup_send_engine
+    test eax, eax
+    jnz .error
 
     movzx ecx, word [start_port]
     movzx r15d, word [end_port]
@@ -241,14 +343,23 @@ _start:
     mov ax, [dst_port_be]
     call build_packet
 
-    call rate_gate
+    call intelligence_gate
     mov rax, SYS_SENDTO
-    mov rdi, [raw_fd]
+    mov rdi, [send_fd]
     lea rsi, [packet_buf]
     mov rdx, 40
     xor r10, r10
+    cmp byte [iface_set], 0
+    jne .send_ll
     lea r8, [sockaddr_dst]
     mov r9, 16
+    jmp .send_do
+
+.send_ll:
+    lea r8, [sockaddr_ll]
+    mov r9, 20
+
+.send_do:
     syscall
     test rax, rax
     js .error
@@ -303,6 +414,25 @@ _start:
     mov [last_win], ax
     mov al, [rdx+13]
     mov bl, al
+    mov dl, [scan_mode]
+    cmp dl, SCAN_SYN
+    je .classify_syn
+    cmp dl, SCAN_ACK
+    je .classify_ack
+    cmp dl, SCAN_WINDOW
+    je .classify_ack
+
+.classify_flag:
+    test bl, 0x04
+    jnz .report_closed
+    jmp .report_filtered
+
+.classify_ack:
+    test bl, 0x04
+    jnz .report_open
+    jmp .report_filtered
+
+.classify_syn:
     and bl, 0x12
     cmp bl, 0x12
     je .report_open
@@ -322,11 +452,21 @@ _start:
 
 .report_open:
     call record_open
+    cmp byte [stab_enabled], 0
+    je .open_no_stab
+    inc dword [stab_recv]
+
+.open_no_stab:
     mov ax, cx
     call write_open_intel
     jmp .next_port
 
 .report_closed:
+    cmp byte [stab_enabled], 0
+    je .closed_no_stab
+    inc dword [stab_recv]
+
+.closed_no_stab:
     mov ax, cx
     mov r9, closed_msg
     mov r10d, closed_len
@@ -334,6 +474,11 @@ _start:
     jmp .next_port
 
 .report_filtered:
+    cmp byte [stab_enabled], 0
+    je .filtered_no_stab
+    inc dword [stab_timeout]
+
+.filtered_no_stab:
     mov ax, cx
     mov r9, filtered_msg
     mov r10d, filtered_len
@@ -341,6 +486,7 @@ _start:
     jmp .next_port
 
 .next_port:
+    call stabilize_step
     inc ecx
     jmp .scan_loop
 
@@ -376,6 +522,16 @@ _start:
     syscall
 
 .exit_close_raw:
+    mov rax, [send_fd]
+    test rax, rax
+    jz .exit_close_raw_fd
+    cmp rax, [raw_fd]
+    je .exit_close_raw_fd
+    mov rdi, rax
+    mov rax, SYS_CLOSE
+    syscall
+
+.exit_close_raw_fd:
     mov rax, [raw_fd]
     test rax, rax
     jz .exit_now
@@ -553,6 +709,136 @@ write_summary:
     call buf_write
     ret
 
+copy_iface_name:
+    push rbx
+    lea rdi, [iface_name]
+    xor eax, eax
+    mov rcx, 16
+    rep stosb
+    lea rdi, [iface_name]
+    mov rcx, 15
+
+.iface_copy_loop:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .iface_copy_done
+    inc rsi
+    inc rdi
+    dec rcx
+    jnz .iface_copy_loop
+    pop rbx
+    mov eax, 1
+    ret
+
+.iface_copy_done:
+    pop rbx
+    xor eax, eax
+    ret
+
+setup_send_engine:
+    cmp byte [iface_set], 0
+    je .use_raw
+    call verify_iface
+    test eax, eax
+    jnz .setup_fail
+    mov rax, SYS_SOCKET
+    mov rdi, AF_PACKET
+    mov rsi, SOCK_DGRAM
+    mov rdx, ETH_P_IP_BE
+    syscall
+    test rax, rax
+    js .setup_fail
+    mov [send_fd], rax
+    mov word [sockaddr_ll], AF_PACKET
+    mov word [sockaddr_ll+2], ETH_P_IP_BE
+    mov eax, [ifindex]
+    mov [sockaddr_ll+4], eax
+    mov byte [engine_id], ENGINE_L2
+    xor eax, eax
+    ret
+
+.use_raw:
+    mov rax, [raw_fd]
+    mov [send_fd], rax
+    xor eax, eax
+    ret
+
+.setup_fail:
+    mov eax, 1
+    ret
+
+verify_iface:
+    push rbx
+    lea rdi, [ifreq_buf]
+    xor eax, eax
+    mov rcx, 40/8
+    rep stosq
+    lea rsi, [iface_name]
+    lea rdi, [ifreq_buf]
+    mov rcx, 16
+
+.ifreq_copy:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .ifreq_copy_done
+    inc rsi
+    inc rdi
+    dec rcx
+    jnz .ifreq_copy
+    jmp .iface_fail
+
+.ifreq_copy_done:
+    mov rax, SYS_SOCKET
+    mov rdi, AF_INET
+    mov rsi, SOCK_DGRAM
+    mov rdx, IPPROTO_UDP
+    syscall
+    test rax, rax
+    js .iface_fail
+    mov rbx, rax
+
+    mov rax, SYS_IOCTL
+    mov rdi, rbx
+    mov rsi, SIOCGIFINDEX
+    lea rdx, [ifreq_buf]
+    syscall
+    test rax, rax
+    js .iface_close_fail
+    mov eax, [ifreq_buf+16]
+    mov [ifindex], eax
+
+    mov rax, SYS_IOCTL
+    mov rdi, rbx
+    mov rsi, SIOCGIFFLAGS
+    lea rdx, [ifreq_buf]
+    syscall
+    test rax, rax
+    js .iface_close_fail
+    mov ax, [ifreq_buf+16]
+    test ax, IFF_UP
+    jz .iface_close_fail
+    test ax, IFF_RUNNING
+    jz .iface_close_fail
+
+    mov rax, SYS_CLOSE
+    mov rdi, rbx
+    syscall
+    pop rbx
+    xor eax, eax
+    ret
+
+.iface_close_fail:
+    mov rax, SYS_CLOSE
+    mov rdi, rbx
+    syscall
+
+.iface_fail:
+    pop rbx
+    mov eax, 1
+    ret
+
 rate_gate:
     cmp byte [rate_enabled], 0
     je .rate_done
@@ -579,10 +865,94 @@ rate_gate:
 .rate_done:
     ret
 
+intelligence_gate:
+    call rate_gate
+    ret
+
+stabilize_step:
+    cmp byte [stab_enabled], 0
+    je .stab_done
+    cmp byte [rate_enabled], 0
+    je .stab_done
+    push rcx
+    mov eax, [stab_sent]
+    test eax, eax
+    jz .stab_restore
+    xor edx, edx
+    mov ecx, 128
+    div ecx
+    test edx, edx
+    jne .stab_restore
+    mov eax, [stab_timeout]
+    mov ecx, [stab_recv]
+    lea edx, [ecx*2]
+    cmp eax, edx
+    ja .stab_slow
+    lea edx, [eax*2]
+    cmp ecx, edx
+    ja .stab_fast
+    jmp .stab_reset
+
+.stab_slow:
+    call slow_down
+    jmp .stab_reset
+
+.stab_fast:
+    call speed_up
+
+.stab_reset:
+    mov dword [stab_sent], 0
+    mov dword [stab_recv], 0
+    mov dword [stab_timeout], 0
+
+.stab_restore:
+    pop rcx
+
+.stab_done:
+    ret
+
+slow_down:
+    mov rax, [rate_cycles]
+    mov rcx, rax
+    shr rcx, 2
+    add rax, rcx
+    mov rdx, [rate_max_cycles]
+    test rdx, rdx
+    jz .slow_store
+    cmp rax, rdx
+    jbe .slow_store
+    mov rax, rdx
+
+.slow_store:
+    mov [rate_cycles], rax
+    ret
+
+speed_up:
+    mov rax, [rate_cycles]
+    mov rcx, rax
+    shr rcx, 3
+    sub rax, rcx
+    mov rdx, [rate_min_cycles]
+    test rdx, rdx
+    jz .fast_store
+    cmp rax, rdx
+    jae .fast_store
+    mov rax, rdx
+
+.fast_store:
+    mov [rate_cycles], rax
+    ret
+
 init_rate:
     mov eax, [rate_value]
     test eax, eax
-    jz .init_rate_done
+    jnz .init_rate_do
+    cmp byte [stab_enabled], 0
+    je .init_rate_done
+    mov dword [rate_value], 200000
+    mov eax, [rate_value]
+
+.init_rate_do:
     call calibrate_tsc
     mov ecx, [rate_value]
     mov rax, [tsc_hz]
@@ -590,6 +960,15 @@ init_rate:
     div rcx
     mov [rate_cycles], rax
     mov byte [rate_enabled], 1
+    cmp byte [stab_enabled], 0
+    je .init_rate_done
+    mov rax, [rate_cycles]
+    mov rcx, rax
+    shl rcx, 2
+    mov [rate_max_cycles], rcx
+    mov rcx, rax
+    shr rcx, 2
+    mov [rate_min_cycles], rcx
 
 .init_rate_done:
     ret

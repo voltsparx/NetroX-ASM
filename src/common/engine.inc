@@ -4,6 +4,7 @@
 %define ENGINE_SYN 1
 %define ENGINE_UDP 2
 %define ENGINE_ICMP 3
+%define ENGINE_L2 4
 
 ; build_packet dispatches based on engine_id
 build_packet:
