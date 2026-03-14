@@ -318,6 +318,7 @@ _start:
     jmp .exit
 
 .error:
+    call flush_output
     mov rax, SYS_WRITE
     mov rdi, 2
     lea rsi, [error_msg]
@@ -326,6 +327,7 @@ _start:
     mov r12d, 1
 
 .exit:
+    call flush_output
     mov rax, [epoll_fd]
     test rax, rax
     jz .exit_close_raw
@@ -346,61 +348,97 @@ _start:
     mov rdi, r12
     syscall
 
+; rsi=src, edx=len
+buf_write:
+    mov r8, rsi
+    mov r9, rdx
+    mov rax, [output_pos]
+    mov rcx, rax
+    add rcx, r9
+    cmp rcx, OUTPUT_BUF_SIZE
+    ja .buf_flush
+    cmp rcx, OUTPUT_FLUSH_THRESHOLD
+    jae .buf_flush
+
+.buf_write:
+    lea rdi, [output_buf+rax]
+    mov rsi, r8
+    mov rdx, r9
+    mov rcx, rdx
+    rep movsb
+    add rax, r9
+    mov [output_pos], rax
+    ret
+
+.buf_flush:
+    call flush_output
+    mov rax, [output_pos]
+    jmp .buf_write
+
+flush_output:
+    mov rax, [output_pos]
+    test rax, rax
+    jz .flush_done
+    mov rdi, 1
+    lea rsi, [output_buf]
+    mov rdx, rax
+    mov rax, SYS_WRITE
+    syscall
+    mov qword [output_pos], 0
+
+.flush_done:
+    ret
+
 ; inputs: ax=value
-write_u16:
+append_u16:
     movzx eax, ax
     lea rsi, [out_buf+6]
-    mov r8d, 0
+    xor rcx, rcx
 
 .u16_digits:
-    xor edx, edx
-    mov ebx, 10
-    div ebx
-    add dl, '0'
+    mov r8d, eax
+    mov r9d, 0xCCCCCCCD
+    mul r9d
+    mov eax, edx
+    shr eax, 3
+    lea edx, [eax*4 + eax]
+    add edx, edx
+    sub r8d, edx
+    add r8b, '0'
     dec rsi
-    mov [rsi], dl
-    inc r8d
+    mov [rsi], r8b
+    inc rcx
     test eax, eax
     jnz .u16_digits
 
-    mov rax, SYS_WRITE
-    mov rdi, 1
-    mov rdx, r8
-    syscall
+    mov edx, ecx
+    call buf_write
     ret
 
 ; inputs: ax=port, r9=msg ptr, r10d=msg len
 write_result:
-    call write_u16
-    mov rax, SYS_WRITE
-    mov rdi, 1
+    call append_u16
     mov rsi, r9
-    mov rdx, r10
-    syscall
+    mov edx, r10d
+    call buf_write
     ret
 
 ; inputs: ax=port, uses last_ttl/last_win
 write_open_intel:
-    call write_u16
-    mov rax, SYS_WRITE
-    mov rdi, 1
+    call append_u16
     lea rsi, [open_ttl_msg]
-    mov rdx, open_ttl_len
-    syscall
+    mov edx, open_ttl_len
+    call buf_write
     movzx ax, byte [last_ttl]
-    call write_u16
-    mov rax, SYS_WRITE
-    mov rdi, 1
+    call append_u16
     lea rsi, [open_win_msg]
-    mov rdx, open_win_len
-    syscall
+    mov edx, open_win_len
+    call buf_write
     mov ax, [last_win]
-    call write_u16
-    mov rax, SYS_WRITE
-    mov rdi, 1
+    call append_u16
     lea rsi, [newline_msg]
-    mov rdx, newline_len
-    syscall
+    mov edx, newline_len
+    call buf_write
     ret
 
 ; returns eax = 0 on success, 1 on failure
