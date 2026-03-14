@@ -1,5 +1,5 @@
 ; ============================================================
-; intelligence.inc  -  Netx-ASM Intelligence Engine
+; intelligence.inc  -  NetroX-ASM Intelligence Engine
 ;
 ; Provides:
 ;   intel_init          - zero all intel state (call once before scan)

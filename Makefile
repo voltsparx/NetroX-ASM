@@ -25,9 +25,9 @@ all: linux windows
 # Linux build:  single statically linked ELF64, no shared libs
 # ---------------------------------------------------------------
 linux: $(BUILD_DIR)/main.o
-	$(LD) -o netx-asm $(BUILD_DIR)/main.o
-	@echo "[+] Linux build: netx-asm"
-	@ls -lh netx-asm
+	$(LD) -o netrox-asm $(BUILD_DIR)/main.o
+	@echo "[+] Linux build: netrox-asm"
+	@ls -lh netrox-asm
 
 $(BUILD_DIR)/main.o: $(SRC_DIR)/main.asm $(COMMON_DEPS)
 	@mkdir -p $(BUILD_DIR)
@@ -37,10 +37,10 @@ $(BUILD_DIR)/main.o: $(SRC_DIR)/main.asm $(COMMON_DEPS)
 # Windows build: PE64, only ws2_32 + kernel32 imports
 # ---------------------------------------------------------------
 windows: $(WIN_BUILD_DIR)/main.obj
-	$(MINGW_LD) -o netx-asm.exe $(WIN_BUILD_DIR)/main.obj \
+	$(MINGW_LD) -o netrox-asm.exe $(WIN_BUILD_DIR)/main.obj \
 		-lws2_32 -lkernel32
-	@echo "[+] Windows build: netx-asm.exe"
-	@ls -lh netx-asm.exe
+	@echo "[+] Windows build: netrox-asm.exe"
+	@ls -lh netrox-asm.exe
 
 $(WIN_BUILD_DIR)/main.obj: $(WIN_SRC_DIR)/main.asm $(COMMON_DEPS)
 	@mkdir -p $(WIN_BUILD_DIR)
@@ -50,4 +50,4 @@ $(WIN_BUILD_DIR)/main.obj: $(WIN_SRC_DIR)/main.asm $(COMMON_DEPS)
 # Clean
 # ---------------------------------------------------------------
 clean:
-	rm -rf build netx-asm netx-asm.exe
+	rm -rf build netrox-asm netrox-asm.exe

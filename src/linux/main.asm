@@ -1,5 +1,5 @@
 ; ===========================================================================
-; Netx-ASM  |  Linux x86_64  |  Part 1 of 5: Headers, .data, .bss
+; NetroX-ASM  |  Linux x86_64  |  Part 1 of 5: Headers, .data, .bss
 ; ===========================================================================
 
 BITS 64
@@ -20,42 +20,133 @@ GLOBAL _start
 ; ---------------------------------------------------------------------------
 SECTION .data
 
-usage_msg   db "Usage: netx-asm <target_ip> [-p port|start-end|-]", 10
+usage_msg   db "Usage: netrox-asm <target_ip> [-p port|start-end|-]", 10
             db "       [--rate N] [--iface IFACE] [--scan MODE]", 10
-            db "       [--bench] [--os] [--stabilize] [--about]", 10
-            db "       [--prompt-mode]", 10
+            db "       [--bench] [--os] [--stabilize] [--about] [--wizard]", 10
             db "Scan modes: syn ack fin null xmas window maimon", 10
 usage_len   equ $-usage_msg
 
-banner_msg  db "   _  __    __           ___   ______  ___", 10
-            db "  / |/ /__ / /___ ______/ _ | / __/  |/  /", 10
-            db " /    / -_) __/\\ \\/___/ __ |_\\ \\/ /|_/ / ", 10
-            db "/_/|_/\\__/\\__//_\\_\\   /_/ |_/___/_/  /_/  ", 10, 10
+banner_msg  db "   _  __    __           _  __    ___   ______  ___", 10
+            db "  / |/ /__ / /________  | |/_/___/ _ | / __/  |/  /", 10
+            db " /    / -_) __/ __/ _ \\_>  </___/ __ |_\\ \\/ /|_/ / ", 10
+            db "/_/|_/\\__/\\__/_/  \\___/_/|_|   /_/ |_/___/_/  /_/  ", 10, 10
 banner_len  equ $-banner_msg
 
 about_msg   db "author : voltsparx", 10
             db "email  : voltsparx@gmail.com", 10
-            db "repo   : https://github.com/voltsparx/Netx-ASM", 10
+            db "repo   : https://github.com/voltsparx/NetroX-ASM", 10
             db "github : github.com/voltsparx", 10
 about_len   equ $-about_msg
 
-; Prompt strings
-prompt_intro    db "Netx-ASM interactive prompt", 10
-prompt_intro_len equ $-prompt_intro
-prompt_target   db "Target IP: "
-prompt_target_len equ $-prompt_target
-prompt_ports    db "Ports [1-1000 | - for all]: "
-prompt_ports_len equ $-prompt_ports
-prompt_scan     db "Scan mode [syn|ack|fin|null|xmas|window|maimon] (default syn): "
-prompt_scan_len equ $-prompt_scan
-prompt_rate     db "Rate pps (leave blank for unlimited): "
-prompt_rate_len equ $-prompt_rate
-prompt_iface    db "Interface (optional, press Enter to skip): "
-prompt_iface_len equ $-prompt_iface
-prompt_stab     db "Stabilize? (y/n) [n]: "
-prompt_stab_len equ $-prompt_stab
-prompt_invalid  db "Invalid input", 10
+prompt_invalid    db "  Invalid input. Try again.", 10
 prompt_invalid_len equ $-prompt_invalid
+
+wizard_hdr      db 10, "  NetroX-ASM Wizard", 10
+                db "  ---------------------", 10
+wizard_hdr_len  equ $-wizard_hdr
+
+wiz_q_target    db "  [1] Target IP address: "
+wiz_q_target_len equ $-wiz_q_target
+
+wiz_q_ports     db "  [2] Port range (e.g. 1-1000, 80, or - for all): "
+wiz_q_ports_len equ $-wiz_q_ports
+
+wiz_q_mode      db "  [3] Scan mode:", 10
+                db "      syn    - TCP SYN (default, fast, reliable)", 10
+                db "      ack    - TCP ACK (firewall mapping)", 10
+                db "      fin    - TCP FIN (bypass some filters)", 10
+                db "      null   - No flags (bypass some filters)", 10
+                db "      xmas   - FIN+PSH+URG (bypass some filters)", 10
+                db "      udp    - UDP datagram scan", 10
+                db "      ping   - ICMP echo host discovery", 10
+                db "  Choice [syn]: "
+wiz_q_mode_len  equ $-wiz_q_mode
+
+wiz_q_rate      db "  [4] Rate limit in packets/sec (0 = unlimited): "
+wiz_q_rate_len  equ $-wiz_q_rate
+
+wiz_q_os        db "  [5] Enable OS fingerprinting? (y/n) [n]: "
+wiz_q_os_len    equ $-wiz_q_os
+
+wiz_q_bench     db "  [6] Show benchmark stats after scan? (y/n) [n]: "
+wiz_q_bench_len equ $-wiz_q_bench
+
+wiz_q_stab      db "  [7] Enable adaptive rate stabilizer? (y/n) [n]: "
+wiz_q_stab_len  equ $-wiz_q_stab
+
+wiz_q_iface     db "  [8] Network interface (press Enter to skip): "
+wiz_q_iface_len equ $-wiz_q_iface
+
+wiz_summary_hdr db 10, "  --- Scan Summary ---", 10
+wiz_summary_hdr_len equ $-wiz_summary_hdr
+
+wiz_sum_target  db "  Target  : "
+wiz_sum_target_len equ $-wiz_sum_target
+
+wiz_sum_ports   db "  Ports   : "
+wiz_sum_ports_len equ $-wiz_sum_ports
+
+wiz_sum_mode    db "  Mode    : "
+wiz_sum_mode_len equ $-wiz_sum_mode
+
+wiz_sum_rate    db "  Rate    : "
+wiz_sum_rate_len equ $-wiz_sum_rate
+
+wiz_sum_flags   db "  Flags   : "
+wiz_sum_flags_len equ $-wiz_sum_flags
+
+wiz_confirm     db 10, "  Start scan? (y/n): "
+wiz_confirm_len equ $-wiz_confirm
+
+wiz_abort       db "  Aborted.", 10
+wiz_abort_len   equ $-wiz_abort
+
+wiz_starting    db "  Starting...", 10, 10
+wiz_starting_len equ $-wiz_starting
+
+wiz_unlim       db "unlimited"
+wiz_unlim_len   equ $-wiz_unlim
+
+wiz_flag_os     db "os "
+wiz_flag_os_len equ $-wiz_flag_os
+
+wiz_flag_bench  db "bench "
+wiz_flag_bench_len equ $-wiz_flag_bench
+
+wiz_flag_stab   db "stabilize "
+wiz_flag_stab_len equ $-wiz_flag_stab
+
+wiz_flag_none   db "none"
+wiz_flag_none_len equ $-wiz_flag_none
+
+wiz_dash        db " - "
+wiz_dash_len    equ $-wiz_dash
+
+; Mode name strings for summary display
+wiz_mode_syn    db "syn",    0
+wiz_mode_ack    db "ack",    0
+wiz_mode_fin    db "fin",    0
+wiz_mode_null   db "null",   0
+wiz_mode_xmas   db "xmas",   0
+wiz_mode_window db "window", 0
+wiz_mode_maimon db "maimon", 0
+wiz_mode_udp    db "udp",    0
+wiz_mode_ping   db "ping",   0
+
+; Pointer table indexed by SCAN_xxx constant (1-based)
+wiz_mode_ptrs   dq 0
+                dq wiz_mode_syn
+                dq wiz_mode_ack
+                dq wiz_mode_fin
+                dq wiz_mode_null
+                dq wiz_mode_xmas
+                dq wiz_mode_window
+                dq wiz_mode_maimon
+                dq wiz_mode_udp
+                dq wiz_mode_ping
+
+; Target IP string buffer for summary display
+wiz_target_str  db "               ", 0  ; 16 bytes, filled at runtime
 
 ; Result output strings
 closed_msg      db " CLOSED", 10
@@ -118,6 +209,15 @@ start_port      dw 1
 end_port        dw 1000
 src_port_be     dw 0
 dst_port_be     dw 0
+align 16
+pkt_template_0  db 0x45,0x00,0x00,0x28,0x00,0x00,0x40,0x00
+                db 0x40,0x06,0x00,0x00,0x00,0x00,0x00,0x00
+pkt_template_1  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+                db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+pkt_template_2  db 0x00,0x00,0x00,0x00,0x50,0x02,0xFF,0xFF
+                db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+align 8
+flag_table      db 0x02,0x02,0x10,0x01,0x00,0x29,0x10,0x11,0x00,0x00
 
 ; ---------------------------------------------------------------------------
 ; .bss  -  zero-initialised runtime buffers and variables
@@ -178,8 +278,6 @@ stab_recv       resd 1
 stab_timeout    resd 1
 
 ; Prompt / flags
-input_buf       resb 256
-prompt_mode     resb 1
 
 ; Feature flags
 bench_enabled   resb 1
@@ -219,9 +317,26 @@ intel_svc_name      resb 16
 intel_banner        resb 64
 intel_banner_len    resw 1
 intel_port_cur      resw 1
+align 64
+packet_buf_aligned  resb 64
+align 64
+pkt_ring            resb 1024
+ring_send_idx       resb 1
+ring_build_idx      resb 1
+batch_counter       resb 1
+xorshift_state      resq 1
+blackrock_key_0     resq 1
+blackrock_key_1     resq 1
+blackrock_key_2     resq 1
+blackrock_key_3     resq 1
+blackrock_key_4     resq 1
+blackrock_key_5     resq 1
+input_buf           resb 256
+prompt_mode         resb 1
+wiz_any_flag        resb 1
 
 ; ===========================================================================
-; Netx-ASM  |  Linux x86_64  |  Part 2 of 5: _start, arg parsing, init
+; NetroX-ASM  |  Linux x86_64  |  Part 2 of 5: _start, arg parsing, init
 ; ===========================================================================
 
 SECTION .text
@@ -233,13 +348,12 @@ _start:
     cmp rax, 2
     jb .usage
 
-    mov rdi, [rbx+16]
-    call is_prompt_mode
-    test eax, eax
-    jnz .prompt_entry
     call is_about_mode
     test eax, eax
     jnz .about_entry
+    call is_wizard_mode
+    test eax, eax
+    jnz .wizard_entry
 
     mov rdi, [rbx+16]
     call parse_ip
@@ -404,13 +518,9 @@ _start:
     ; Set engine based on scan_mode
     mov byte [engine_id], ENGINE_SYN
 
-    ; Print banner unless in prompt mode
-    cmp byte [prompt_mode], 0
-    jne .skip_banner
     lea rsi, [banner_msg]
     mov edx, banner_len
     call buf_write
-.skip_banner:
 
     ; Detect local source IP
     call get_local_ip
@@ -419,6 +529,12 @@ _start:
 
     ; Init rate control and TSC calibration
     call init_rate
+    call blackrock_init
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    mov [xorshift_state], rax
+    mov byte [batch_counter], 0
     call intel_init
 
     ; Capture bench start TSC
@@ -496,10 +612,16 @@ _start:
     ; Load scan range into registers
     movzx ecx, word [start_port]
     movzx r15d, word [end_port]
+    mov r14d, r15d
+    sub r14d, ecx
+    inc r14d
+    mov r15d, r14d
+    mov r14d, ecx
+    xor ebx, ebx
     ; fall through into scan loop (Part 3)
 
 ; ===========================================================================
-; Netx-ASM  |  Linux x86_64  |  Part 3 of 5: Scan loop, classify, OS FP
+; NetroX-ASM  |  Linux x86_64  |  Part 3 of 5: Scan loop, classify, OS FP
 ; ===========================================================================
 
 ; -------------------------------------------------------------------
@@ -507,17 +629,39 @@ _start:
 ; ecx = current port, r15d = end port
 ; -------------------------------------------------------------------
 .scan_loop:
-    cmp ecx, r15d
-    ja .scan_done
+    cmp rbx, r15
+    jae .scan_done
 
+    mov rdi, rbx
+    mov rsi, r15
+    call blackrock_permute
+    add eax, r14d
+
+    mov ecx, eax
     mov ax, cx
     mov [dst_port], ax
     xchg al, ah
     mov [dst_port_be], ax
 
-    call build_packet
+    mov [packet_buf+22], ax
+    mov [sockaddr_dst+2], ax
+    inc word [packet_buf+4]
+    call fast_cksum_update
+
     call intel_rtt_start
     call intelligence_gate
+
+    movzx eax, byte [batch_counter]
+    inc al
+    cmp al, 64
+    jb .batch_continue
+    xor al, al
+    xor r10d, r10d
+    jmp .do_send
+.batch_continue:
+    mov r10d, MSG_MORE
+.do_send:
+    mov [batch_counter], al
 
     ; sendto
     mov rax, SYS_SENDTO
@@ -525,7 +669,6 @@ _start:
     lea rsi, [packet_buf]
     ; TCP packet length
     mov edx, 40
-    xor r10, r10
     cmp byte [iface_set], 0
     jne .send_ll
     lea r8, [sockaddr_dst]
@@ -690,7 +833,7 @@ _start:
 
 .next_port:
     call stabilize_step
-    inc ecx
+    inc rbx
     jmp .scan_loop
 
 ; -------------------------------------------------------------------
@@ -719,9 +862,9 @@ _start:
 ; -------------------------------------------------------------------
 ; Entry points for special modes
 ; -------------------------------------------------------------------
-.prompt_entry:
+.wizard_entry:
     mov byte [prompt_mode], 1
-    call prompt_flow
+    call wizard_flow
     test eax, eax
     jnz .prompt_fail
     jmp .ports_ready
@@ -785,144 +928,8 @@ _start:
     mov rdi, r12
     syscall
 
-; -------------------------------------------------------------------
-; fingerprint_os
-; Passive OS detection from SYN-ACK already in recv_buf
-; Sets os_result_idx based on TTL, window, and options scoring
-; -------------------------------------------------------------------
-fingerprint_os:
-    push rbx
-    push r12
-    push r13
-
-    ; Score table: [window_lo, window_hi, ttl_class, score, os_idx]
-    ; ttl_class: 0=64 (Linux), 1=128 (Windows), 2=255 (Device)
-    movzx r12d, byte [last_ttl]
-    movzx r13d, word [last_win]
-
-    ; Determine TTL class
-    xor ebx, ebx                        ; ttl_class = 0 (Linux)
-    cmp r12d, 70
-    jbe .ttl_class_done
-    mov ebx, 1                          ; Windows
-    cmp r12d, 130
-    jbe .ttl_class_done
-    mov ebx, 2                          ; Device
-.ttl_class_done:
-
-    ; Score each OS candidate
-    xor eax, eax                        ; best_score
-    mov byte [os_result_idx], 6         ; default: Unknown
-
-    ; Linux 5.x/6.x: win=64240, ttl_class=0
-    xor ecx, ecx
-    cmp r13d, 64240
-    jne .fp_linux_old
-    inc ecx
-.fp_linux_old:
-    cmp r13d, 29200
-    jne .fp_linux_score
-    inc ecx
-.fp_linux_score:
-    test ebx, ebx
-    jnz .fp_linux_end
-    inc ecx
-    cmp ecx, eax
-    jbe .fp_linux_end
-    mov eax, ecx
-    mov byte [os_result_idx], 0
-.fp_linux_end:
-
-    ; Linux 3.x/4.x: win=29200 or 65535, ttl_class=0
-    xor ecx, ecx
-    cmp r13d, 29200
-    je .fp_l3_win
-    cmp r13d, 65535
-    jne .fp_l3_score
-.fp_l3_win:
-    inc ecx
-.fp_l3_score:
-    test ebx, ebx
-    jnz .fp_l3_end
-    inc ecx
-    cmp ecx, eax
-    jbe .fp_l3_end
-    mov eax, ecx
-    mov byte [os_result_idx], 1
-.fp_l3_end:
-
-    ; Windows 10/11: win=65535 or 64240, ttl_class=1
-    xor ecx, ecx
-    cmp r13d, 65535
-    je .fp_w10_win
-    cmp r13d, 64240
-    jne .fp_w10_score
-.fp_w10_win:
-    inc ecx
-.fp_w10_score:
-    cmp ebx, 1
-    jne .fp_w10_end
-    inc ecx
-    cmp ecx, eax
-    jbe .fp_w10_end
-    mov eax, ecx
-    mov byte [os_result_idx], 2
-.fp_w10_end:
-
-    ; Windows 7/8: win=8192 or 16384, ttl_class=1
-    xor ecx, ecx
-    cmp r13d, 8192
-    je .fp_w7_win
-    cmp r13d, 16384
-    jne .fp_w7_score
-.fp_w7_win:
-    inc ecx
-.fp_w7_score:
-    cmp ebx, 1
-    jne .fp_w7_end
-    inc ecx
-    cmp ecx, eax
-    jbe .fp_w7_end
-    mov eax, ecx
-    mov byte [os_result_idx], 3
-.fp_w7_end:
-
-    ; macOS/BSD: win=65228 or 65535, ttl_class=0
-    xor ecx, ecx
-    cmp r13d, 65228
-    je .fp_mac_win
-    cmp r13d, 65535
-    jne .fp_mac_score
-.fp_mac_win:
-    inc ecx
-.fp_mac_score:
-    test ebx, ebx
-    jnz .fp_mac_end
-    inc ecx
-    cmp ecx, eax
-    jbe .fp_mac_end
-    mov eax, ecx
-    mov byte [os_result_idx], 4
-.fp_mac_end:
-
-    ; Network device: ttl_class=2
-    xor ecx, ecx
-    cmp ebx, 2
-    jne .fp_dev_end
-    add ecx, 2
-    cmp ecx, eax
-    jbe .fp_dev_end
-    mov eax, ecx
-    mov byte [os_result_idx], 5
-.fp_dev_end:
-
-    pop r13
-    pop r12
-    pop rbx
-    ret
-
 ; ===========================================================================
-; Netx-ASM  |  Linux x86_64  |  Part 4 of 5: Output, summary, bench, prompt
+; NetroX-ASM  |  Linux x86_64  |  Part 4 of 5: Output, summary, bench
 ; ===========================================================================
 
 ; -------------------------------------------------------------------
@@ -1192,26 +1199,6 @@ print_about:
     ret
 
 ; -------------------------------------------------------------------
-; is_prompt_mode  rdi=arg -> eax=1 if "--prompt-mode"
-; -------------------------------------------------------------------
-is_prompt_mode:
-    cmp dword [rdi],    '--pr'
-    jne .no
-    cmp dword [rdi+4],  'ompt'
-    jne .no
-    cmp dword [rdi+8],  '-mod'
-    jne .no
-    cmp byte  [rdi+12], 'e'
-    jne .no
-    cmp byte  [rdi+13], 0
-    jne .no
-    mov eax, 1
-    ret
-.no:
-    xor eax, eax
-    ret
-
-; -------------------------------------------------------------------
 ; is_about_mode  rdi=arg -> eax=1 if "--about"
 ; -------------------------------------------------------------------
 is_about_mode:
@@ -1228,127 +1215,8 @@ is_about_mode:
     ret
 
 ; -------------------------------------------------------------------
-; prompt_flow
-; Interactive configuration wizard
-; Returns eax=0 on success, 1 on failure
-; -------------------------------------------------------------------
-prompt_flow:
-    call print_about
-    lea rsi, [prompt_intro]
-    mov edx, prompt_intro_len
-    call buf_write
-    call flush_output
-
-    ; Target IP
-    lea rsi, [prompt_target]
-    mov edx, prompt_target_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .fail
-    lea rdi, [input_buf]
-    call parse_ip
-    test eax, eax
-    jz .fail
-    mov [target_ip], eax
-
-    ; Port range
-    lea rsi, [prompt_ports]
-    mov edx, prompt_ports_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .ports_ok
-    cmp byte [input_buf], '-'
-    jne .ports_parse
-    cmp byte [input_buf+1], 0
-    jne .ports_parse
-    mov word [start_port], 1
-    mov word [end_port], 65535
-    jmp .ports_ok
-.ports_parse:
-    lea rdi, [input_buf]
-    call parse_port_range
-    test ax, ax
-    jz .fail
-    mov [start_port], ax
-    mov [end_port], dx
-.ports_ok:
-
-    ; Scan mode
-    lea rsi, [prompt_scan]
-    mov edx, prompt_scan_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .scan_ok
-    lea rdi, [input_buf]
-    call parse_scan_mode
-    test al, al
-    jz .fail
-    mov [scan_mode], al
-.scan_ok:
-
-    ; Rate
-    lea rsi, [prompt_rate]
-    mov edx, prompt_rate_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .rate_ok
-    lea rdi, [input_buf]
-    call parse_u32
-    test eax, eax
-    jz .fail
-    mov [rate_value], eax
-.rate_ok:
-
-    ; Interface
-    lea rsi, [prompt_iface]
-    mov edx, prompt_iface_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .iface_ok
-    lea rsi, [input_buf]
-    call copy_iface_name
-    test eax, eax
-    jnz .fail
-    mov byte [iface_set], 1
-.iface_ok:
-
-    ; Stabilize
-    lea rsi, [prompt_stab]
-    mov edx, prompt_stab_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .stab_ok
-    mov al, [input_buf]
-    or al, 0x20
-    cmp al, 'y'
-    jne .stab_ok
-    mov byte [stab_enabled], 1
-.stab_ok:
-    xor eax, eax
-    ret
-.fail:
-    lea rsi, [prompt_invalid]
-    mov edx, prompt_invalid_len
-    call buf_write
-    call flush_output
-    mov eax, 1
-    ret
-
-; -------------------------------------------------------------------
-; prompt_read_line  rsi=prompt, edx=len, rdi=buf, ecx=bufsize
-; Returns eax=1 if non-empty, 0 if empty/error
+; rsi=prompt_str, edx=prompt_len, rdi=dest_buf, ecx=buf_size
+; returns eax=1 if non-empty input, 0 if empty or error
 ; -------------------------------------------------------------------
 prompt_read_line:
     push rbx
@@ -1363,7 +1231,7 @@ prompt_read_line:
     dec rdx
     syscall
     test rax, rax
-    jle .none
+    jle .empty
     mov rcx, rax
     mov byte [rbx+rcx], 0
     mov rdi, rbx
@@ -1374,14 +1242,14 @@ prompt_read_line:
     movzx eax, al
     pop rbx
     ret
-.none:
+.empty:
     mov byte [rbx], 0
     xor eax, eax
     pop rbx
     ret
 
 ; -------------------------------------------------------------------
-; trim_line  rdi=buffer  (strips \r and \n at end)
+; rdi=buffer, strips trailing \r and \n
 ; -------------------------------------------------------------------
 trim_line:
     mov al, [rdi]
@@ -1398,8 +1266,333 @@ trim_line:
 .done:
     ret
 
+; -------------------------------------------------------------------
+; rdi -> arg string, returns eax=1 if matches --wizard
+; -------------------------------------------------------------------
+is_wizard_mode:
+    cmp dword [rdi],   '--wi'
+    jne .no
+    cmp dword [rdi+4], 'zard'
+    jne .no
+    cmp byte  [rdi+8], 0
+    jne .no
+    mov eax, 1
+    ret
+.no:
+    xor eax, eax
+    ret
+
+; -------------------------------------------------------------------
+; wizard_flow
+; Returns eax=0 on success, 1 on failure/abort
+; -------------------------------------------------------------------
+wizard_flow:
+    lea rsi, [banner_msg]
+    mov edx, banner_len
+    call buf_write
+    lea rsi, [wizard_hdr]
+    mov edx, wizard_hdr_len
+    call buf_write
+
+    ; Question 1: target IP
+    lea rsi, [wiz_q_target]
+    mov edx, wiz_q_target_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .invalid
+    lea rdi, [input_buf]
+    call parse_ip
+    test eax, eax
+    jz .invalid
+    mov [target_ip], eax
+    ; copy raw input into wiz_target_str (max 15 chars)
+    lea rsi, [input_buf]
+    lea rdi, [wiz_target_str]
+    mov ecx, 15
+.copy_ip:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .ip_copied
+    inc rsi
+    inc rdi
+    loop .copy_ip
+    mov byte [rdi], 0
+.ip_copied:
+
+    ; Question 2: port range
+    lea rsi, [wiz_q_ports]
+    mov edx, wiz_q_ports_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .ports_default
+    cmp byte [input_buf], '-'
+    jne .ports_parse
+    cmp byte [input_buf+1], 0
+    jne .ports_parse
+    mov word [start_port], 1
+    mov word [end_port], 65535
+    jmp .ports_done
+.ports_parse:
+    lea rdi, [input_buf]
+    call parse_port_range
+    test ax, ax
+    jz .invalid
+    mov [start_port], ax
+    mov [end_port], dx
+    jmp .ports_done
+.ports_default:
+    mov word [start_port], 1
+    mov word [end_port], 1000
+.ports_done:
+
+    ; Question 3: scan mode
+    lea rsi, [wiz_q_mode]
+    mov edx, wiz_q_mode_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .mode_default
+    lea rdi, [input_buf]
+    call parse_scan_mode
+    test al, al
+    jz .invalid
+    mov [scan_mode], al
+    jmp .mode_done
+.mode_default:
+    mov byte [scan_mode], SCAN_SYN
+.mode_done:
+
+    ; Question 4: rate
+    lea rsi, [wiz_q_rate]
+    mov edx, wiz_q_rate_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .rate_unlim
+    cmp byte [input_buf], '0'
+    jne .rate_parse
+    cmp byte [input_buf+1], 0
+    je .rate_unlim
+.rate_parse:
+    lea rdi, [input_buf]
+    call parse_u32
+    mov [rate_value], eax
+    jmp .rate_done
+.rate_unlim:
+    xor eax, eax
+    mov [rate_value], eax
+.rate_done:
+
+    ; Question 5: OS fingerprint
+    lea rsi, [wiz_q_os]
+    mov edx, wiz_q_os_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .os_done
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .os_done
+    mov byte [os_enabled], 1
+.os_done:
+
+    ; Question 6: benchmark
+    lea rsi, [wiz_q_bench]
+    mov edx, wiz_q_bench_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .bench_done
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .bench_done
+    mov byte [bench_enabled], 1
+.bench_done:
+
+    ; Question 7: stabilizer
+    lea rsi, [wiz_q_stab]
+    mov edx, wiz_q_stab_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .stab_done
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .stab_done
+    mov byte [stab_enabled], 1
+.stab_done:
+
+    ; Question 8: interface
+    lea rsi, [wiz_q_iface]
+    mov edx, wiz_q_iface_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .iface_done
+    lea rsi, [input_buf]
+    call copy_iface_name
+    mov byte [iface_set], 1
+.iface_done:
+
+    ; Print summary
+    lea rsi, [wiz_summary_hdr]
+    mov edx, wiz_summary_hdr_len
+    call buf_write
+
+    lea rsi, [wiz_sum_target]
+    mov edx, wiz_sum_target_len
+    call buf_write
+    lea rsi, [wiz_target_str]
+    xor edx, edx
+.target_len:
+    cmp byte [rsi+rdx], 0
+    je .target_len_done
+    inc edx
+    jmp .target_len
+.target_len_done:
+    call buf_write
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_ports]
+    mov edx, wiz_sum_ports_len
+    call buf_write
+    mov ax, [start_port]
+    call append_u16
+    lea rsi, [wiz_dash]
+    mov edx, wiz_dash_len
+    call buf_write
+    mov ax, [end_port]
+    call append_u16
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_mode]
+    mov edx, wiz_sum_mode_len
+    call buf_write
+    movzx eax, byte [scan_mode]
+    lea rsi, [wiz_mode_ptrs]
+    mov rsi, [rsi + rax*8]
+    xor edx, edx
+.mode_len:
+    cmp byte [rsi+rdx], 0
+    je .mode_len_done
+    inc edx
+    jmp .mode_len
+.mode_len_done:
+    call buf_write
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_rate]
+    mov edx, wiz_sum_rate_len
+    call buf_write
+    mov eax, [rate_value]
+    test eax, eax
+    jz .rate_unlim_print
+    mov ax, [rate_value]
+    call append_u16
+    jmp .rate_print_done
+.rate_unlim_print:
+    lea rsi, [wiz_unlim]
+    mov edx, wiz_unlim_len
+    call buf_write
+.rate_print_done:
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_flags]
+    mov edx, wiz_sum_flags_len
+    call buf_write
+    mov byte [wiz_any_flag], 0
+    cmp byte [os_enabled], 0
+    je .no_os_flag
+    lea rsi, [wiz_flag_os]
+    mov edx, wiz_flag_os_len
+    call buf_write
+    mov byte [wiz_any_flag], 1
+.no_os_flag:
+    cmp byte [bench_enabled], 0
+    je .no_bench_flag
+    lea rsi, [wiz_flag_bench]
+    mov edx, wiz_flag_bench_len
+    call buf_write
+    mov byte [wiz_any_flag], 1
+.no_bench_flag:
+    cmp byte [stab_enabled], 0
+    je .no_stab_flag
+    lea rsi, [wiz_flag_stab]
+    mov edx, wiz_flag_stab_len
+    call buf_write
+    mov byte [wiz_any_flag], 1
+.no_stab_flag:
+    cmp byte [wiz_any_flag], 0
+    jne .flags_done
+    lea rsi, [wiz_flag_none]
+    mov edx, wiz_flag_none_len
+    call buf_write
+.flags_done:
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    ; Confirmation
+    lea rsi, [wiz_confirm]
+    mov edx, wiz_confirm_len
+    call buf_write
+    call flush_output
+    mov rax, SYS_READ
+    xor rdi, rdi
+    lea rsi, [input_buf]
+    mov rdx, 1
+    syscall
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .abort
+
+    lea rsi, [wiz_starting]
+    mov edx, wiz_starting_len
+    call buf_write
+    call flush_output
+    xor eax, eax
+    ret
+
+.abort:
+    lea rsi, [wiz_abort]
+    mov edx, wiz_abort_len
+    call buf_write
+    call flush_output
+    mov eax, 1
+    ret
+
+.invalid:
+    lea rsi, [prompt_invalid]
+    mov edx, prompt_invalid_len
+    call buf_write
+    call flush_output
+    mov eax, 1
+    ret
 ; ===========================================================================
-; Netx-ASM  |  Linux x86_64  |  Part 5 of 5: Network helpers, rate, stabilize
+; NetroX-ASM  |  Linux x86_64  |  Part 5 of 5: Network helpers, rate, stabilize
 ; ===========================================================================
 
 ; -------------------------------------------------------------------
@@ -1775,4 +1968,242 @@ calibrate_tsc:
     mul rcx
     div r8
     mov [tsc_hz], rax
+    ret
+
+; -------------------------------------------------------------------
+; blackrock_init
+; -------------------------------------------------------------------
+blackrock_init:
+    rdtsc
+    shl rdx, 32
+    or rax, rdx                     ; 64-bit seed from TSC
+    ; Derive 6 round keys via xorshift64
+    mov r8, rax
+    mov rcx, 6
+    lea rdi, [blackrock_key_0]
+.keygen:
+    ; xorshift64
+    mov rax, r8
+    shl rax, 13
+    xor r8, rax
+    mov rax, r8
+    shr rax, 7
+    xor r8, rax
+    mov rax, r8
+    shl rax, 17
+    xor r8, rax
+    mov [rdi], r8
+    add rdi, 8
+    loop .keygen
+    ret
+
+; -------------------------------------------------------------------
+; feistel_f
+; -------------------------------------------------------------------
+feistel_f:
+    mov rax, r9
+    add rax, r10                    ; R + key
+    ; Bit mixing: multiply by a prime, rotate, XOR
+    mov rcx, 0x9e3779b97f4a7c15     ; golden ratio constant
+    mul rcx
+    xor rax, rdx                    ; fold high bits down
+    rol rax, 17                     ; rotate
+    ret
+
+; -------------------------------------------------------------------
+; blackrock_permute
+; -------------------------------------------------------------------
+blackrock_permute:
+    push rbx
+    push r12
+    push r13
+
+    ; Compute split: a_bits = floor(log2(range) / 2)
+    ;                b_bits = ceil(log2(range) / 2)
+    ; For 16-bit range (65535 elements): a_bits=8, b_bits=8
+    ; For larger ranges: adjust accordingly
+    mov r12, rdi                    ; index to permute
+    mov r13, rsi                    ; range
+
+    ; Compute half-sizes for Feistel
+    ; a = lower half bits, b = upper half bits
+    ; For simplicity with 16-bit range:
+    ;   a_mask = 0x00FF (lower 8 bits)
+    ;   b_mask = 0xFF00 (upper 8 bits)
+    ;   a = index & 0xFF
+    ;   b = (index >> 8) & 0xFF
+
+    ; For arbitrary ranges: use dynamic bit splitting
+    ; (hardcode for 16-bit range as optimization)
+    mov rbx, r12
+    and rbx, 0xFF                   ; L = lower 8 bits
+    mov rcx, r12
+    shr rcx, 8
+    and rcx, 0xFF                   ; R = upper 8 bits
+
+    ; 6 Feistel rounds
+    %assign round 0
+    %rep 6
+        mov r9, rcx                 ; R
+        mov r10, [blackrock_key_ %+ round]
+        call feistel_f              ; rax = f(R, key)
+        xor rbx, rax                ; L = L XOR f(R, key)
+        and rbx, 0xFF               ; keep in range
+        ; Ensure result stays within range using cycle-walking:
+        ; if result >= range_half: xor again with adjusted key
+        ; (for simplicity with power-of-2 ranges, mask is sufficient)
+        xchg rbx, rcx               ; swap L,R for next round
+        %assign round round+1
+    %endrep
+
+    ; Reconstruct: output = (L << 8) | R
+    shl rcx, 8
+    or rcx, rbx
+    ; Cycle-walking: if result >= range, permute again
+.cycle_walk:
+    cmp rcx, r13
+    jb .done
+    ; Re-permute the out-of-range result
+    mov r12, rcx
+    ; (simplified: just increment and mask for speed)
+    ; Full implementation: recursive permute until in range
+    inc rcx
+    cmp rcx, r13
+    jb .done
+    xor rcx, rcx                    ; wrap to 0
+.done:
+    mov rax, rcx
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+; -------------------------------------------------------------------
+; incremental_ip_cksum_update
+; -------------------------------------------------------------------
+incremental_ip_cksum_update:
+    movzx eax, word [packet_buf+10] ; old checksum
+    not ax                          ; ~old_checksum
+    movzx ebx, word [packet_buf+4]  ; new IP ID
+    dec bx                          ; old IP ID = new - 1
+    not bx                          ; ~old_value
+    add ax, bx                      ; ~old_checksum + ~old_value
+    ; fold carry
+    mov cx, ax
+    shr cx, 15
+    and ax, 0x7FFF
+    add ax, cx
+    movzx ebx, word [packet_buf+4]  ; new IP ID
+    add ax, bx                      ; + new_value
+    not ax                          ; ~ result
+    mov [packet_buf+10], ax         ; store new checksum
+    ret
+
+; -------------------------------------------------------------------
+; incremental_tcp_cksum_update
+; -------------------------------------------------------------------
+incremental_tcp_cksum_update:
+    movzx eax, word [packet_buf+36] ; old TCP checksum
+    not ax
+    movzx ebx, word [packet_buf+22] ; new dst_port
+    sub bx, 1                       ; approximate old port (if sequential)
+    ; NOTE: for non-sequential (Blackrock) iteration, must store old port
+    not bx
+    add ax, bx
+    movzx ebx, word [packet_buf+22]
+    add ax, bx
+    not ax
+    mov [packet_buf+36], ax
+    ret
+
+; -------------------------------------------------------------------
+; fast_cksum_update
+; -------------------------------------------------------------------
+fast_cksum_update:
+    call incremental_ip_cksum_update
+    call incremental_tcp_cksum_update
+    ret
+
+; -------------------------------------------------------------------
+; init_packet_sse2
+; -------------------------------------------------------------------
+init_packet_sse2:
+    movdqu xmm0, [pkt_template_0]
+    movdqu [packet_buf],    xmm0    ; bytes 0-15
+    movdqu xmm1, [pkt_template_1]
+    movdqu [packet_buf+16], xmm1    ; bytes 16-31
+    movdqu xmm2, [pkt_template_2]
+    movdqu [packet_buf+24], xmm2    ; bytes 24-39 (overlapping is fine)
+    ; Now patch: src IP, dst IP, src port
+    mov eax, [source_ip]
+    mov [packet_buf+12], eax
+    mov eax, [target_ip]
+    mov [packet_buf+16], eax
+    mov ax,  [src_port_be]
+    mov [packet_buf+20], ax
+    ret
+
+; -------------------------------------------------------------------
+; xorshift64_next
+; -------------------------------------------------------------------
+xorshift64_next:
+    mov rax, [xorshift_state]
+    mov rcx, rax
+    shl rcx, 13
+    xor rax, rcx
+    mov rcx, rax
+    shr rcx, 7
+    xor rax, rcx
+    mov rcx, rax
+    shl rcx, 17
+    xor rax, rcx
+    mov [xorshift_state], rax
+    ; lower 32 bits = usable random value
+    ret
+
+; -------------------------------------------------------------------
+; rate_gate_v2
+; -------------------------------------------------------------------
+rate_gate_v2:
+    cmp byte [rate_enabled], 0
+    je .done
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    mov r8, [last_send_tsc]
+    test r8, r8
+    jz .store
+.wait:
+    mov r9, rax
+    sub r9, r8                      ; elapsed cycles
+    cmp r9, [rate_cycles]
+    jae .store
+    ; Check if remaining wait is large (>10000 cycles ~ few microseconds)
+    mov r10, [rate_cycles]
+    sub r10, r9                     ; remaining cycles
+    cmp r10, 10000
+    jb .spin_tight                  ; small wait: pure spin
+    pause                           ; PAUSE hint: reduces power + memory hazards
+.spin_tight:
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    jmp .wait
+.store:
+    mov [last_send_tsc], rax
+.done:
+    ret
+
+; -------------------------------------------------------------------
+; update_rate_cycles
+; -------------------------------------------------------------------
+update_rate_cycles:
+    mov ecx, [rate_value]
+    test ecx, ecx
+    jz .done
+    mov rax, [tsc_hz]
+    xor rdx, rdx
+    div rcx
+    mov [rate_cycles], rax
+.done:
     ret

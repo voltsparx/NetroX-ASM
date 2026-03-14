@@ -1,5 +1,5 @@
 ; ===========================================================================
-; Netx-ASM  |  Windows x86_64  |  Part 1 of 4: Headers, externs, .data, .bss
+; NetroX-ASM  |  Windows x86_64  |  Part 1 of 4: Headers, externs, .data, .bss
 ; ===========================================================================
 
 BITS 64
@@ -50,38 +50,130 @@ extern ExitProcess
 ; ---------------------------------------------------------------------------
 SECTION .data
 
-usage_msg   db "Usage: netx-asm.exe <target_ip> [-p port|start-end|-]", 13, 10
+usage_msg   db "Usage: netrox-asm.exe <target_ip> [-p port|start-end|-]", 13, 10
             db "       [--rate N] [--scan MODE] [--bench] [--os]", 13, 10
-            db "       [--stabilize] [--about] [--prompt-mode]", 13, 10
+            db "       [--stabilize] [--about] [--wizard]", 13, 10
             db "Scan modes: syn ack fin null xmas window maimon", 13, 10
 usage_len   equ $-usage_msg
 
-banner_msg  db "   _  __    __           ___   ______  ___", 13, 10
-            db "  / |/ /__ / /___ ______/ _ | / __/  |/  /", 13, 10
-            db " /    / -_) __/\\ \\/___/ __ |_\\ \\/ /|_/ / ", 13, 10
-            db "/_/|_/\\__/\\__//_\\_\\   /_/ |_/___/_/  /_/  ", 13, 10, 13, 10
+banner_msg  db "   _  __    __           _  __    ___   ______  ___", 13, 10
+            db "  / |/ /__ / /________  | |/_/___/ _ | / __/  |/  /", 13, 10
+            db " /    / -_) __/ __/ _ \\_>  </___/ __ |_\\ \\/ /|_/ / ", 13, 10
+            db "/_/|_/\\__/\\__/_/  \\___/_/|_|   /_/ |_/___/_/  /_/  ", 13, 10, 13, 10
 banner_len  equ $-banner_msg
 
 about_msg   db "author : voltsparx", 13, 10
             db "email  : voltsparx@gmail.com", 13, 10
-            db "repo   : https://github.com/voltsparx/Netx-ASM", 13, 10
+            db "repo   : https://github.com/voltsparx/NetroX-ASM", 13, 10
             db "github : github.com/voltsparx", 13, 10
 about_len   equ $-about_msg
 
-prompt_intro     db "Netx-ASM interactive prompt", 13, 10
-prompt_intro_len equ $-prompt_intro
-prompt_target    db "Target IP: "
-prompt_target_len equ $-prompt_target
-prompt_ports     db "Ports [1-1000 | - for all]: "
-prompt_ports_len equ $-prompt_ports
-prompt_scan      db "Scan mode [syn|ack|fin|null|xmas|window|maimon] (default syn): "
-prompt_scan_len  equ $-prompt_scan
-prompt_rate      db "Rate pps (leave blank for unlimited): "
-prompt_rate_len  equ $-prompt_rate
-prompt_stab      db "Stabilize? (y/n) [n]: "
-prompt_stab_len  equ $-prompt_stab
-prompt_invalid   db "Invalid input", 13, 10
+prompt_invalid    db "  Invalid input. Try again.", 10
 prompt_invalid_len equ $-prompt_invalid
+
+wizard_hdr      db 10, "  NetroX-ASM Wizard", 10
+                db "  ---------------------", 10
+wizard_hdr_len  equ $-wizard_hdr
+
+wiz_q_target    db "  [1] Target IP address: "
+wiz_q_target_len equ $-wiz_q_target
+
+wiz_q_ports     db "  [2] Port range (e.g. 1-1000, 80, or - for all): "
+wiz_q_ports_len equ $-wiz_q_ports
+
+wiz_q_mode      db "  [3] Scan mode:", 10
+                db "      syn    - TCP SYN (default, fast, reliable)", 10
+                db "      ack    - TCP ACK (firewall mapping)", 10
+                db "      fin    - TCP FIN (bypass some filters)", 10
+                db "      null   - No flags (bypass some filters)", 10
+                db "      xmas   - FIN+PSH+URG (bypass some filters)", 10
+                db "      udp    - UDP datagram scan", 10
+                db "      ping   - ICMP echo host discovery", 10
+                db "  Choice [syn]: "
+wiz_q_mode_len  equ $-wiz_q_mode
+
+wiz_q_rate      db "  [4] Rate limit in packets/sec (0 = unlimited): "
+wiz_q_rate_len  equ $-wiz_q_rate
+
+wiz_q_os        db "  [5] Enable OS fingerprinting? (y/n) [n]: "
+wiz_q_os_len    equ $-wiz_q_os
+
+wiz_q_bench     db "  [6] Show benchmark stats after scan? (y/n) [n]: "
+wiz_q_bench_len equ $-wiz_q_bench
+
+wiz_q_stab      db "  [7] Enable adaptive rate stabilizer? (y/n) [n]: "
+wiz_q_stab_len  equ $-wiz_q_stab
+
+wiz_summary_hdr db 10, "  --- Scan Summary ---", 10
+wiz_summary_hdr_len equ $-wiz_summary_hdr
+
+wiz_sum_target  db "  Target  : "
+wiz_sum_target_len equ $-wiz_sum_target
+
+wiz_sum_ports   db "  Ports   : "
+wiz_sum_ports_len equ $-wiz_sum_ports
+
+wiz_sum_mode    db "  Mode    : "
+wiz_sum_mode_len equ $-wiz_sum_mode
+
+wiz_sum_rate    db "  Rate    : "
+wiz_sum_rate_len equ $-wiz_sum_rate
+
+wiz_sum_flags   db "  Flags   : "
+wiz_sum_flags_len equ $-wiz_sum_flags
+
+wiz_confirm     db 10, "  Start scan? (y/n): "
+wiz_confirm_len equ $-wiz_confirm
+
+wiz_abort       db "  Aborted.", 10
+wiz_abort_len   equ $-wiz_abort
+
+wiz_starting    db "  Starting...", 10, 10
+wiz_starting_len equ $-wiz_starting
+
+wiz_unlim       db "unlimited"
+wiz_unlim_len   equ $-wiz_unlim
+
+wiz_flag_os     db "os "
+wiz_flag_os_len equ $-wiz_flag_os
+
+wiz_flag_bench  db "bench "
+wiz_flag_bench_len equ $-wiz_flag_bench
+
+wiz_flag_stab   db "stabilize "
+wiz_flag_stab_len equ $-wiz_flag_stab
+
+wiz_flag_none   db "none"
+wiz_flag_none_len equ $-wiz_flag_none
+
+wiz_dash        db " - "
+wiz_dash_len    equ $-wiz_dash
+
+; Mode name strings for summary display
+wiz_mode_syn    db "syn",    0
+wiz_mode_ack    db "ack",    0
+wiz_mode_fin    db "fin",    0
+wiz_mode_null   db "null",   0
+wiz_mode_xmas   db "xmas",   0
+wiz_mode_window db "window", 0
+wiz_mode_maimon db "maimon", 0
+wiz_mode_udp    db "udp",    0
+wiz_mode_ping   db "ping",   0
+
+; Pointer table indexed by SCAN_xxx constant (1-based)
+wiz_mode_ptrs   dq 0
+                dq wiz_mode_syn
+                dq wiz_mode_ack
+                dq wiz_mode_fin
+                dq wiz_mode_null
+                dq wiz_mode_xmas
+                dq wiz_mode_window
+                dq wiz_mode_maimon
+                dq wiz_mode_udp
+                dq wiz_mode_ping
+
+; Target IP string buffer for summary display
+wiz_target_str  db "               ", 0  ; 16 bytes, filled at runtime
 
 closed_msg      db " CLOSED", 13, 10
 closed_len      equ $-closed_msg
@@ -137,6 +229,15 @@ start_port  dw 1
 end_port    dw 1000
 src_port_be dw 0
 dst_port_be dw 0
+align 16
+pkt_template_0  db 0x45,0x00,0x00,0x28,0x00,0x00,0x40,0x00
+                db 0x40,0x06,0x00,0x00,0x00,0x00,0x00,0x00
+pkt_template_1  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+                db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+pkt_template_2  db 0x00,0x00,0x00,0x00,0x50,0x02,0xFF,0xFF
+                db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+align 8
+flag_table      db 0x02,0x02,0x10,0x01,0x00,0x29,0x10,0x11,0x00,0x00
 
 ; ---------------------------------------------------------------------------
 ; .bss
@@ -189,9 +290,6 @@ stab_enabled    resb 1
 stab_sent       resd 1
 stab_recv       resd 1
 stab_timeout    resd 1
-
-input_buf       resb 256
-prompt_mode     resb 1
 bench_enabled   resb 1
 os_enabled      resb 1
 bench_start_tsc resq 1
@@ -224,9 +322,20 @@ intel_svc_name      resb 16
 intel_banner        resb 64
 intel_banner_len    resw 1
 intel_port_cur      resw 1
+align 64
+packet_buf_aligned  resb 64
+align 64
+pkt_ring            resb 1024
+ring_send_idx       resb 1
+ring_build_idx      resb 1
+batch_counter       resb 1
+xorshift_state      resq 1
+input_buf           resb 256
+prompt_mode         resb 1
+wiz_any_flag        resb 1
 
 ; ===========================================================================
-; Netx-ASM  |  Windows x86_64  |  Part 2 of 4: _start, args, init, scan loop
+; NetroX-ASM  |  Windows x86_64  |  Part 2 of 4: _start, args, init, scan loop
 ; ===========================================================================
 
 SECTION .text
@@ -279,13 +388,13 @@ _start:
     mov rsi, rax
 
     mov rdi, rsi
-    call is_prompt_mode
-    test eax, eax
-    jnz .prompt_entry
-    mov rdi, rsi
     call is_about_mode
     test eax, eax
     jnz .about_entry
+    mov rdi, rsi
+    call is_wizard_mode
+    test eax, eax
+    jnz .wizard_entry
     mov rdi, rsi
     call parse_ip
     test eax, eax
@@ -417,12 +526,9 @@ _start:
 .scan_mode_set:
     mov byte [engine_id], ENGINE_SYN
 
-    cmp byte [prompt_mode], 0
-    jne .skip_banner
     lea rsi, [banner_msg]
     mov edx, banner_len
     call buf_write
-.skip_banner:
 
     call get_local_ip
     test eax, eax
@@ -492,7 +598,7 @@ _start:
     mov [dst_port_be], ax
     call build_packet
     call intel_rtt_start
-    call rate_gate
+    call intelligence_gate
 
     ; TCP packet length
     mov edx, 40
@@ -646,12 +752,15 @@ _start:
 .skip_bench_print:
     jmp .exit
 
-.prompt_entry:
+.wizard_entry:
     mov byte [prompt_mode], 1
-    call prompt_flow
+    call wizard_flow
     test eax, eax
-    jnz .exit
+    jnz .prompt_fail
     jmp .ports_ready
+
+.prompt_fail:
+    jmp .exit
 
 .about_entry:
     call print_about
@@ -687,7 +796,7 @@ _start:
     call ExitProcess
 
 ; ===========================================================================
-; Netx-ASM  |  Windows x86_64  |  Part 3 of 4: Output, OS FP, summary, bench
+; NetroX-ASM  |  Windows x86_64  |  Part 3 of 4: Output, OS FP, summary, bench
 ; ===========================================================================
 
 ; -------------------------------------------------------------------
@@ -1072,26 +1181,6 @@ print_about:
     ret
 
 ; -------------------------------------------------------------------
-; is_prompt_mode  rdi -> eax=1 if "--prompt-mode"
-; -------------------------------------------------------------------
-is_prompt_mode:
-    cmp dword [rdi],    '--pr'
-    jne .no
-    cmp dword [rdi+4],  'ompt'
-    jne .no
-    cmp dword [rdi+8],  '-mod'
-    jne .no
-    cmp byte  [rdi+12], 'e'
-    jne .no
-    cmp byte  [rdi+13], 0
-    jne .no
-    mov eax, 1
-    ret
-.no:
-    xor eax, eax
-    ret
-
-; -------------------------------------------------------------------
 ; is_about_mode  rdi -> eax=1 if "--about"
 ; -------------------------------------------------------------------
 is_about_mode:
@@ -1108,104 +1197,8 @@ is_about_mode:
     ret
 
 ; -------------------------------------------------------------------
-; prompt_flow  (Windows version uses WriteFile/ReadFile)
-; Returns eax=0 ok, 1 fail
-; -------------------------------------------------------------------
-prompt_flow:
-    call print_about
-    lea rsi, [prompt_intro]
-    mov edx, prompt_intro_len
-    call write_stdout
-
-    lea rsi, [prompt_target]
-    mov edx, prompt_target_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .fail
-    lea rdi, [input_buf]
-    call parse_ip
-    test eax, eax
-    jz .fail
-    mov [target_ip], eax
-
-    lea rsi, [prompt_ports]
-    mov edx, prompt_ports_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .ports_ok
-    cmp byte [input_buf], '-'
-    jne .ports_parse
-    cmp byte [input_buf+1], 0
-    jne .ports_parse
-    mov word [start_port], 1
-    mov word [end_port], 65535
-    jmp .ports_ok
-.ports_parse:
-    lea rdi, [input_buf]
-    call parse_port_range
-    test ax, ax
-    jz .fail
-    mov [start_port], ax
-    mov [end_port], dx
-.ports_ok:
-
-    lea rsi, [prompt_scan]
-    mov edx, prompt_scan_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .scan_ok
-    lea rdi, [input_buf]
-    call parse_scan_mode
-    test al, al
-    jz .fail
-    mov [scan_mode], al
-.scan_ok:
-
-    lea rsi, [prompt_rate]
-    mov edx, prompt_rate_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .rate_ok
-    lea rdi, [input_buf]
-    call parse_u32
-    test eax, eax
-    jz .fail
-    mov [rate_value], eax
-.rate_ok:
-
-    lea rsi, [prompt_stab]
-    mov edx, prompt_stab_len
-    lea rdi, [input_buf]
-    mov ecx, 256
-    call prompt_read_line
-    test eax, eax
-    jz .stab_ok
-    mov al, [input_buf]
-    or al, 0x20
-    cmp al, 'y'
-    jne .stab_ok
-    mov byte [stab_enabled], 1
-.stab_ok:
-    xor eax, eax
-    ret
-.fail:
-    lea rsi, [prompt_invalid]
-    mov edx, prompt_invalid_len
-    call write_stdout
-    mov eax, 1
-    ret
-
-; -------------------------------------------------------------------
-; prompt_read_line  rsi=prompt, edx=len, rdi=buf, ecx=bufsize
-; Returns eax=1 non-empty, 0 empty/error
+; rsi=prompt_str, edx=prompt_len, rdi=dest_buf, ecx=buf_size
+; returns eax=1 if non-empty input, 0 if empty or error
 ; -------------------------------------------------------------------
 prompt_read_line:
     push rbx
@@ -1243,7 +1236,7 @@ prompt_read_line:
     ret
 
 ; -------------------------------------------------------------------
-; trim_line  rdi=buf
+; rdi=buffer, strips trailing \r and \n
 ; -------------------------------------------------------------------
 trim_line:
     mov al, [rdi]
@@ -1260,8 +1253,323 @@ trim_line:
 .done:
     ret
 
+; -------------------------------------------------------------------
+; rdi -> arg string, returns eax=1 if matches --wizard
+; -------------------------------------------------------------------
+is_wizard_mode:
+    cmp dword [rdi],   '--wi'
+    jne .no
+    cmp dword [rdi+4], 'zard'
+    jne .no
+    cmp byte  [rdi+8], 0
+    jne .no
+    mov eax, 1
+    ret
+.no:
+    xor eax, eax
+    ret
+
+; -------------------------------------------------------------------
+; wizard_flow
+; Returns eax=0 on success, 1 on failure/abort
+; -------------------------------------------------------------------
+wizard_flow:
+    lea rsi, [banner_msg]
+    mov edx, banner_len
+    call buf_write
+    lea rsi, [wizard_hdr]
+    mov edx, wizard_hdr_len
+    call buf_write
+
+    ; Question 1: target IP
+    lea rsi, [wiz_q_target]
+    mov edx, wiz_q_target_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .invalid
+    lea rdi, [input_buf]
+    call parse_ip
+    test eax, eax
+    jz .invalid
+    mov [target_ip], eax
+    ; copy raw input into wiz_target_str (max 15 chars)
+    lea rsi, [input_buf]
+    lea rdi, [wiz_target_str]
+    mov ecx, 15
+.copy_ip:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .ip_copied
+    inc rsi
+    inc rdi
+    loop .copy_ip
+    mov byte [rdi], 0
+.ip_copied:
+
+    ; Question 2: port range
+    lea rsi, [wiz_q_ports]
+    mov edx, wiz_q_ports_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .ports_default
+    cmp byte [input_buf], '-'
+    jne .ports_parse
+    cmp byte [input_buf+1], 0
+    jne .ports_parse
+    mov word [start_port], 1
+    mov word [end_port], 65535
+    jmp .ports_done
+.ports_parse:
+    lea rdi, [input_buf]
+    call parse_port_range
+    test ax, ax
+    jz .invalid
+    mov [start_port], ax
+    mov [end_port], dx
+    jmp .ports_done
+.ports_default:
+    mov word [start_port], 1
+    mov word [end_port], 1000
+.ports_done:
+
+    ; Question 3: scan mode
+    lea rsi, [wiz_q_mode]
+    mov edx, wiz_q_mode_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .mode_default
+    lea rdi, [input_buf]
+    call parse_scan_mode
+    test al, al
+    jz .invalid
+    mov [scan_mode], al
+    jmp .mode_done
+.mode_default:
+    mov byte [scan_mode], SCAN_SYN
+.mode_done:
+
+    ; Question 4: rate
+    lea rsi, [wiz_q_rate]
+    mov edx, wiz_q_rate_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .rate_unlim
+    cmp byte [input_buf], '0'
+    jne .rate_parse
+    cmp byte [input_buf+1], 0
+    je .rate_unlim
+.rate_parse:
+    lea rdi, [input_buf]
+    call parse_u32
+    mov [rate_value], eax
+    jmp .rate_done
+.rate_unlim:
+    xor eax, eax
+    mov [rate_value], eax
+.rate_done:
+
+    ; Question 5: OS fingerprint
+    lea rsi, [wiz_q_os]
+    mov edx, wiz_q_os_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .os_done
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .os_done
+    mov byte [os_enabled], 1
+.os_done:
+
+    ; Question 6: benchmark
+    lea rsi, [wiz_q_bench]
+    mov edx, wiz_q_bench_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .bench_done
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .bench_done
+    mov byte [bench_enabled], 1
+.bench_done:
+
+    ; Question 7: stabilizer
+    lea rsi, [wiz_q_stab]
+    mov edx, wiz_q_stab_len
+    lea rdi, [input_buf]
+    mov ecx, 256
+    call prompt_read_line
+    test eax, eax
+    jz .stab_done
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .stab_done
+    mov byte [stab_enabled], 1
+.stab_done:
+
+    ; Print summary
+    lea rsi, [wiz_summary_hdr]
+    mov edx, wiz_summary_hdr_len
+    call buf_write
+
+    lea rsi, [wiz_sum_target]
+    mov edx, wiz_sum_target_len
+    call buf_write
+    lea rsi, [wiz_target_str]
+    xor edx, edx
+.target_len:
+    cmp byte [rsi+rdx], 0
+    je .target_len_done
+    inc edx
+    jmp .target_len
+.target_len_done:
+    call buf_write
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_ports]
+    mov edx, wiz_sum_ports_len
+    call buf_write
+    mov ax, [start_port]
+    call append_u16
+    lea rsi, [wiz_dash]
+    mov edx, wiz_dash_len
+    call buf_write
+    mov ax, [end_port]
+    call append_u16
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_mode]
+    mov edx, wiz_sum_mode_len
+    call buf_write
+    movzx eax, byte [scan_mode]
+    lea rsi, [wiz_mode_ptrs]
+    mov rsi, [rsi + rax*8]
+    xor edx, edx
+.mode_len:
+    cmp byte [rsi+rdx], 0
+    je .mode_len_done
+    inc edx
+    jmp .mode_len
+.mode_len_done:
+    call buf_write
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_rate]
+    mov edx, wiz_sum_rate_len
+    call buf_write
+    mov eax, [rate_value]
+    test eax, eax
+    jz .rate_unlim_print
+    mov ax, [rate_value]
+    call append_u16
+    jmp .rate_print_done
+.rate_unlim_print:
+    lea rsi, [wiz_unlim]
+    mov edx, wiz_unlim_len
+    call buf_write
+.rate_print_done:
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    lea rsi, [wiz_sum_flags]
+    mov edx, wiz_sum_flags_len
+    call buf_write
+    mov byte [wiz_any_flag], 0
+    cmp byte [os_enabled], 0
+    je .no_os_flag
+    lea rsi, [wiz_flag_os]
+    mov edx, wiz_flag_os_len
+    call buf_write
+    mov byte [wiz_any_flag], 1
+.no_os_flag:
+    cmp byte [bench_enabled], 0
+    je .no_bench_flag
+    lea rsi, [wiz_flag_bench]
+    mov edx, wiz_flag_bench_len
+    call buf_write
+    mov byte [wiz_any_flag], 1
+.no_bench_flag:
+    cmp byte [stab_enabled], 0
+    je .no_stab_flag
+    lea rsi, [wiz_flag_stab]
+    mov edx, wiz_flag_stab_len
+    call buf_write
+    mov byte [wiz_any_flag], 1
+.no_stab_flag:
+    cmp byte [wiz_any_flag], 0
+    jne .flags_done
+    lea rsi, [wiz_flag_none]
+    mov edx, wiz_flag_none_len
+    call buf_write
+.flags_done:
+    lea rsi, [newline_msg]
+    mov edx, newline_len
+    call buf_write
+
+    ; Confirmation
+    lea rsi, [wiz_confirm]
+    mov edx, wiz_confirm_len
+    call buf_write
+    call flush_output
+    sub rsp, 40
+    mov rcx, [stdin_handle]
+    lea rdx, [input_buf]
+    mov r8d, 1
+    lea r9, [bytes_read]
+    mov qword [rsp+32], 0
+    call ReadFile
+    add rsp, 40
+    mov al, [input_buf]
+    or al, 0x20
+    cmp al, 'y'
+    jne .abort
+
+    lea rsi, [wiz_starting]
+    mov edx, wiz_starting_len
+    call buf_write
+    call flush_output
+    xor eax, eax
+    ret
+
+.abort:
+    lea rsi, [wiz_abort]
+    mov edx, wiz_abort_len
+    call buf_write
+    call flush_output
+    mov eax, 1
+    ret
+
+.invalid:
+    lea rsi, [prompt_invalid]
+    mov edx, prompt_invalid_len
+    call buf_write
+    call flush_output
+    mov eax, 1
+    ret
 ; ===========================================================================
-; Netx-ASM  |  Windows x86_64  |  Part 4 of 4: Rate, stabilize, helpers, TSC
+; NetroX-ASM  |  Windows x86_64  |  Part 4 of 4: Rate, stabilize, helpers, TSC
 ; ===========================================================================
 
 ; -------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# Netx-ASM
+# NetroX-ASM
 
 Phase 1 foundation: Sequential SYN probe in pure x86_64 assembly (Linux + Windows).
 
@@ -17,27 +17,27 @@ make windows
 ## Run
 
 ```sh
-sudo ./netx-asm <target_ip> [-p port|start-end|-] [--rate N] [--iface IFACE] [--scan MODE] [--stabilize]
+sudo ./netrox-asm <target_ip> [-p port|start-end|-] [--rate N] [--iface IFACE] [--scan MODE] [--stabilize]
 ```
 
 ```sh
-netx-asm.exe <target_ip> [-p port|start-end|-] [--rate N] [--scan MODE] [--stabilize]
+netrox-asm.exe <target_ip> [-p port|start-end|-] [--rate N] [--scan MODE] [--stabilize]
 ```
 
 ```sh
-sudo ./netx-asm --prompt-mode
+sudo ./netrox-asm --prompt-mode
 ```
 
 ```sh
-netx-asm.exe --prompt-mode
+netrox-asm.exe --prompt-mode
 ```
 
 ```sh
-./netx-asm --about
+./netrox-asm --about
 ```
 
 ```sh
-netx-asm.exe --about
+netrox-asm.exe --about
 ```
 
 ## Notes

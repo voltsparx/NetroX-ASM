@@ -50,6 +50,7 @@
 %define IP_HDRINCL          3
 %define SOL_SOCKET          1
 %define SO_RCVTIMEO         20
+%define MSG_MORE            0x8000
 
 ; ============================================================
 ; Ethernet protocol numbers (host and network byte order)
