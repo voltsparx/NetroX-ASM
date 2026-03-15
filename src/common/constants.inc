@@ -208,4 +208,32 @@
 %define KIS_IMP_SPIKE_MULT       5
 %define KIS_DRIFT_THRESHOLD      115
 
+; ============================================================
+; Phantom scan mode
+; ============================================================
+%define SCAN_PHANTOM              12
+
+; ============================================================
+; Phantom port state constants
+; ============================================================
+%define PHANTOM_STATE_PASSIVE     0
+%define PHANTOM_STATE_OPEN        1
+%define PHANTOM_STATE_CLOSED      2
+%define PHANTOM_STATE_FILTERED    3
+
+; ============================================================
+; Phantom tuning constants
+; ============================================================
+%define PHANTOM_LISTEN_SECS       10
+%define PHANTOM_TEV_THRESHOLD     15
+%define PHANTOM_OPEN_RATIO        150
+%define PHANTOM_AMBIENT_PROBES    3
+%define PHANTOM_BURST_WINDOW_NS   5000000
+%define PHANTOM_JITTER_MIN_US     500
+%define PHANTOM_JITTER_MAX_US     2500
+%define PHANTOM_TIMEOUT_MS        1000
+%define PHANTOM_TEV_STREAK_MAX    3
+%define PHANTOM_TCP_FLAGS_ACK     0x10
+%define PHANTOM_TCP_WINDOW        0
+
 %endif

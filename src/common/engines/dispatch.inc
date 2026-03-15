@@ -10,6 +10,7 @@
 %include "engines/engine_run.inc"
 %include "engines/sar_engine.inc"
 %include "engines/kis_engine.inc"
+%include "engines/phantom_engine.inc"
 
 ; ============================================================
 ; Engine IDs  -  stored in engine_id (.bss byte)

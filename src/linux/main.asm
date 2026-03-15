@@ -23,7 +23,7 @@ SECTION .data
 usage_msg   db "Usage: netrox-asm <target_ip> [-p port|start-end|-]", 10
             db "       [--rate N] [--iface IFACE] [--scan MODE]", 10
             db "       [--bench] [--os] [--stabilize] [--about] [--wizard]", 10
-            db "Scan modes: syn ack fin null xmas window maimon udp ping sar kis", 10
+            db "Scan modes: syn ack fin null xmas window maimon udp ping sar kis phantom", 10
 usage_len   equ $-usage_msg
 
 banner_msg  db "   _  __    __           _  __    ___   ______  ___", 10
@@ -332,6 +332,42 @@ kis_sjs_table:
     times 13 db 0
     dw 0, 0, 0, 0, 0, 0
     times 13 db 0
+
+phantom_hdr_msg      db "--- [ PHANTOM SCAN: ", 0
+phantom_hdr_end      db " ] ---", 10, 0
+phantom_idle_msg     db "Idle RTT   : ", 0
+phantom_tev_msg      db "TEV Limit  : ", 0
+phantom_tev_pct      db "%", 10, 0
+phantom_listen_msg   db "Listen     : ", 0
+phantom_listen_sec   db "s (passive discovery)", 10, 0
+phantom_passive_msg  db "Passive    : ", 0
+phantom_passive_end  db " ports discovered", 10, 0
+phantom_col_hdr      db "PORT   STATE            METHOD     RTT(ns)  DEV%", 10, 0
+phantom_col_sep      db "-----  ---------------  ---------  -------  ----", 10, 0
+phantom_method_ack   db "ACK-WIN0 ", 0
+phantom_method_obs   db "OBSERVED ", 0
+phantom_state_popen  db "OPEN (PASSIVE) ", 0
+phantom_state_open   db "OPEN           ", 0
+phantom_state_closed db "CLOSED         ", 0
+phantom_state_filt   db "FILTERED       ", 0
+phantom_tev_alert    db 10, "[TEV HARD STOP] Processing fatigue detected.", 10, 0
+phantom_tev_dev_msg  db "Deviation: ", 0
+phantom_tev_thr_msg  db "% (threshold: ", 0
+phantom_tev_end_msg  db "%)", 10, 0
+phantom_sum_hdr      db 10, "--- [ PHANTOM SCAN COMPLETE ] ---", 10, 0
+phantom_sum_passive  db "Passive open  : ", 0
+phantom_sum_open     db "Probed open   : ", 0
+phantom_sum_closed   db "Closed        : ", 0
+phantom_sum_filtered db "Filtered      : ", 0
+phantom_sum_tev      db "TEV triggers  : ", 0
+phantom_sum_bytes    db "Footprint     : ", 0
+phantom_sum_bytes_e  db " bytes", 10, 0
+phantom_tev_ok_msg   db "TEV Status    : INTACT", 10, 0
+phantom_tev_bad_msg  db "TEV Status    : TRIGGERED", 10, 0
+phantom_plus_msg     db "+", 0
+phantom_timeout_str  db "timeout", 0
+phantom_dash_msg     db "-", 0
+phantom_ns_msg       db "ns", 0
 
 ; Result output strings
 closed_msg      db " CLOSED", 10
@@ -667,6 +703,38 @@ kis_count_total      resd 1
 ; Result table and heat map
 kis_results          resb 65535 * 24
 kis_heatmap_buf      resb 65535
+
+; Phantom engine state
+phantom_enabled           resb 1
+phantom_tev_threshold     resb 1
+phantom_idle_rtt          resq 1
+phantom_listen_secs       resb 1
+phantom_burst_window_ns   resq 1
+phantom_jitter_min_us     resd 1
+phantom_jitter_max_us     resd 1
+phantom_last_ambient_tsc  resq 1
+phantom_bytes_sent        resq 1
+phantom_pkts_sent         resd 1
+phantom_t_send            resq 1
+phantom_t_recv            resq 1
+phantom_probe_rtt         resq 1
+phantom_port_state        resb 1
+passive_open_map          resb 8192
+passive_port_count        resd 1
+
+; TEV state
+tev_history               resw 8
+tev_history_idx           resb 1
+tev_consecutive_to        resb 1
+tev_triggered             resb 1
+
+; Phantom result counters
+phantom_count_passive     resd 1
+phantom_count_open        resd 1
+phantom_count_closed      resd 1
+phantom_count_filtered    resd 1
+phantom_count_tev         resd 1
+phantom_count_total       resd 1
 
 ; ===========================================================================
 ; NetroX-ASM  |  Linux x86_64  |  Part 2 of 5: _start, arg parsing, init
@@ -1297,6 +1365,12 @@ _start:
     call kis_run
     jmp  .scan_done
 .not_kis_direct:
+    cmp  byte [scan_mode], SCAN_PHANTOM
+    jne  .not_phantom_direct
+    call phantom_init
+    call phantom_run
+    jmp  .scan_done
+.not_phantom_direct:
     cmp byte [engine_mode], ENGINE_MODE_SEQ
     je .use_seq_engine
     cmp byte [engine_mode], 0

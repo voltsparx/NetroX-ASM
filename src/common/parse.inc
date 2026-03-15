@@ -406,7 +406,7 @@ parse_scan_mode:
     ret
 .scan_kis:
     cmp  al, 'k'
-    jne  .invalid
+    jne  .scan_phantom
     cmp  byte [rdi+1], 'i'
     jne  .invalid
     cmp  byte [rdi+2], 's'
@@ -414,6 +414,26 @@ parse_scan_mode:
     cmp  byte [rdi+3], 0
     jne  .invalid
     mov  al, SCAN_KIS
+    pop  rbx
+    ret
+.scan_phantom:
+    cmp  al, 'p'
+    jne  .invalid
+    cmp  byte [rdi+1], 'h'
+    jne  .invalid
+    cmp  byte [rdi+2], 'a'
+    jne  .invalid
+    cmp  byte [rdi+3], 'n'
+    jne  .invalid
+    cmp  byte [rdi+4], 't'
+    jne  .invalid
+    cmp  byte [rdi+5], 'o'
+    jne  .invalid
+    cmp  byte [rdi+6], 'm'
+    jne  .invalid
+    cmp  byte [rdi+7], 0
+    jne  .invalid
+    mov  al, SCAN_PHANTOM
     pop  rbx
     ret
 .invalid:

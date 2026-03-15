@@ -28,6 +28,11 @@ engine_run:
     call kis_run
     ret
 .not_kis:
+    cmp  byte [scan_mode], SCAN_PHANTOM
+    jne  .not_phantom
+    call phantom_run
+    ret
+.not_phantom:
     ret
 
 print_engine_status:

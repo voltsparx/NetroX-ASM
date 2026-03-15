@@ -15,5 +15,6 @@
 %define SCAN_PING       9       ; ICMP echo scan
 %define SCAN_SAR        10      ; SAR resonance scan
 %define SCAN_KIS        11      ; KIS impedance scan
+%define SCAN_PHANTOM    12      ; Phantom scan
 
 %endif
