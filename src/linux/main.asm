@@ -419,6 +419,41 @@ cb_ntp_payload:
     times 47 db 0x00
 cb_ntp_len equ $ - cb_ntp_payload
 
+resume_msg    db 10, "[*] Scan paused. Resume with: netrox-asm --resume", 10, 0
+resume_fname  db "netrox-asm.resume", 0
+resume_idx_key db "resume-index = ", 0
+resume_target_key db "target = ", 0
+resume_ports_key db "ports = ", 0
+resume_rate_key db "rate = ", 0
+resume_scan_key db "scan = ", 0
+resume_nl db 10, 0
+
+config_sep        db " = ", 0
+config_true_str   db "true", 0
+config_yes_str    db "yes", 0
+
+echo_hdr_msg     db "--- [ NETROX-ASM CONFIGURATION ] ---", 10, 0
+echo_target_msg  db "Target     : ", 0
+echo_scan_msg    db "Scan       : ", 0
+echo_ports_msg   db "Ports      : ", 0
+echo_rate_msg    db "Rate       : ", 0
+echo_engine_msg  db "Engine     : ", 0
+echo_timing_msg  db "Timing     : T", 0
+
+scan_syn_str     db "syn", 0
+scan_ack_str     db "ack", 0
+scan_fin_str     db "fin", 0
+scan_null_str    db "null", 0
+scan_xmas_str    db "xmas", 0
+scan_window_str  db "window", 0
+scan_maimon_str  db "maimon", 0
+scan_udp_str     db "udp", 0
+scan_ping_str    db "ping", 0
+scan_sar_str     db "sar", 0
+scan_kis_str     db "kis", 0
+scan_phantom_str db "phantom", 0
+scan_callback_str db "callback", 0
+
 ; Result output strings
 closed_msg      db " CLOSED", 10
 closed_len      equ $-closed_msg
@@ -820,6 +855,38 @@ cb_count_macos        resd 1
 cb_count_device       resd 1
 cb_count_unknown_os   resd 1
 
+; Stateless cookie
+scan_seed     resq 1
+local_ip      resd 1
+
+; CIDR ranges
+ip_ranges         resb MAX_IP_RANGES * IP_RANGE_ENTRY
+ip_range_count    resd 1
+total_ip_count    resq 1
+total_index_max   resq 1
+cidr_mode         resb 1
+current_scan_ip   resd 1
+
+; Resume/pause
+resume_index      resq 1
+resume_filename   resb 256
+resume_enabled    resb 1
+resume_flag       resb 1
+resume_fd         resq 1
+
+; Config loader
+config_filename   resb 256
+config_enabled    resb 1
+config_buf        resb 4096
+
+; Additional flags
+wait_secs         resb 1
+banners_mode      resb 1
+echo_mode         resb 1
+random_host_count resd 1
+version_enabled   resb 1
+quiet_mode        resb 1
+
 ; ===========================================================================
 ; NetroX-ASM  |  Linux x86_64  |  Part 2 of 5: _start, arg parsing, init
 ; ===========================================================================
@@ -841,10 +908,31 @@ _start:
     jnz .wizard_entry
 
     mov rdi, [rbx+16]
+    mov rsi, rdi
+.cidr_scan:
+    mov al, [rsi]
+    test al, al
+    jz .no_cidr
+    cmp al, '/'
+    je .has_cidr
+    inc rsi
+    jmp .cidr_scan
+.has_cidr:
+    call parse_cidr
+    test eax, eax
+    jz .usage
+    mov byte [cidr_mode], 1
+    mov eax, [ip_ranges]
+    mov [target_ip], eax
+    mov [current_scan_ip], eax
+    jmp .target_ok
+.no_cidr:
     call parse_ip
     test eax, eax
     jz .usage
     mov [target_ip], eax
+    mov [current_scan_ip], eax
+.target_ok:
     lea rsi, [rdi]
     lea rdi, [wiz_target_str]
     mov ecx, 15
@@ -1234,6 +1322,116 @@ _start:
     mov  byte [cb_secondary_enabled], 1
     jmp  .arg_next
 
+.check_resume:
+    ; --resume
+    cmp  byte [rdi+1], '-'
+    jne  .check_config
+    cmp  dword [rdi+2], 'resu'
+    jne  .check_config
+    cmp  dword [rdi+6], 'me'
+    jne  .check_config
+    cmp  byte  [rdi+8], 0
+    jne  .check_config
+    mov  byte [resume_enabled], 1
+    jmp  .arg_next
+
+.check_config:
+    ; --config <file>
+    cmp  byte [rdi+1], '-'
+    jne  .check_wait
+    cmp  dword [rdi+2], 'conf'
+    jne  .check_wait
+    cmp  word  [rdi+6], 'ig'
+    jne  .check_wait
+    cmp  byte  [rdi+8], 0
+    jne  .check_wait
+    inc  rcx
+    cmp  rcx, r13
+    jae  .usage
+    mov  rsi, [rbx+rcx*8]
+    lea  rdi, [config_filename]
+    mov  ecx, 255
+.cfg_copy:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .cfg_done
+    inc rsi
+    inc rdi
+    loop .cfg_copy
+    mov byte [rdi], 0
+.cfg_done:
+    mov  byte [config_enabled], 1
+    jmp  .arg_next
+
+.check_wait:
+    ; --wait N
+    cmp  byte [rdi+1], '-'
+    jne  .check_banners
+    cmp  dword [rdi+2], 'wait'
+    jne  .check_banners
+    cmp  byte  [rdi+6], 0
+    jne  .check_banners
+    inc  rcx
+    cmp  rcx, r13
+    jae  .usage
+    mov  rdi, [rbx+rcx*8]
+    call parse_u32
+    mov  [wait_secs], al
+    jmp  .arg_next
+
+.check_banners:
+    ; --banners
+    cmp  byte [rdi+1], '-'
+    jne  .check_open
+    cmp  dword [rdi+2], 'bann'
+    jne  .check_open
+    cmp  word  [rdi+6], 'ers'
+    jne  .check_open
+    cmp  byte  [rdi+8], 0
+    jne  .check_open
+    mov  byte [version_enabled], 1
+    mov  byte [banners_mode], 1
+    jmp  .arg_next
+
+.check_open:
+    ; --open / --open-only
+    cmp  byte [rdi+1], '-'
+    jne  .check_echo
+    cmp  dword [rdi+2], 'open'
+    jne  .check_echo
+    mov  byte [quiet_mode], 1
+    jmp  .arg_next
+
+.check_echo:
+    ; --echo
+    cmp  byte [rdi+1], '-'
+    jne  .check_iR
+    cmp  dword [rdi+2], 'echo'
+    jne  .check_iR
+    cmp  byte  [rdi+6], 0
+    jne  .check_iR
+    mov  byte [echo_mode], 1
+    jmp  .arg_next
+
+.check_iR:
+    ; -iR N
+    cmp  byte [rdi], '-'
+    jne  .check_engine
+    cmp  byte [rdi+1], 'i'
+    jne  .check_engine
+    cmp  byte [rdi+2], 'R'
+    jne  .check_engine
+    cmp  byte [rdi+3], 0
+    jne  .check_engine
+    inc  rcx
+    cmp  rcx, r13
+    jae  .usage
+    mov  rdi, [rbx+rcx*8]
+    call parse_u32
+    mov  [random_host_count], eax
+    jmp  .arg_next
+
 .check_engine:
     cmp byte [rdi+1], '-'
     jne .check_depth
@@ -1317,6 +1515,22 @@ _start:
 ; All args parsed - set up engine and start scan
 ; -------------------------------------------------------------------
 .ports_ready:
+    cmp byte [config_enabled], 0
+    je .skip_config
+    call load_config_file
+.skip_config:
+    cmp byte [resume_enabled], 0
+    je .skip_resume
+    call read_resume_file
+.skip_resume:
+    cmp dword [random_host_count], 0
+    je .skip_random_hosts
+    call random_hosts_init
+.skip_random_hosts:
+    cmp byte [echo_mode], 0
+    je .skip_echo
+    call print_echo_config
+.skip_echo:
     ; Convert src_port to big-endian
     mov ax, [src_port]
     xchg al, ah
@@ -1334,6 +1548,27 @@ _start:
     mov byte [engine_mode], ENGINE_MODE_ASYNC
 .engine_mode_set:
 
+    ; compute total_index_max for CIDR mode
+    cmp byte [cidr_mode], 0
+    je .cidr_done
+    movzx rax, word [end_port]
+    movzx rbx, word [start_port]
+    sub rax, rbx
+    inc rax                        ; port_count
+    cmp byte [port_list_mode], 0
+    je .cidr_ports_done
+    movzx rax, word [port_list_count]
+    jmp .cidr_ports_done
+.cidr_ports_done:
+    cmp byte [top_ports_mode], 0
+    je .cidr_mul
+    movzx rax, word [top_ports_n]
+.cidr_mul:
+    mov rbx, [total_ip_count]
+    mul rbx
+    mov [total_index_max], rax
+.cidr_done:
+
     ; Set engine based on scan_mode
     mov byte [engine_id], ENGINE_SYN
 
@@ -1345,6 +1580,8 @@ _start:
     call get_local_ip
     test eax, eax
     jnz .error
+    mov eax, [source_ip]
+    mov [local_ip], eax
 
     ; Init rate control and TSC calibration
     call init_rate
@@ -1357,6 +1594,7 @@ _start:
     call intel_init
     call inflight_init
     call print_engine_status
+    call cookie_init
 
     ; Capture bench start TSC
     cmp byte [bench_enabled], 0
@@ -1416,6 +1654,8 @@ _start:
     syscall
     test rax, rax
     js .error
+
+    call setup_sigint_handler
 
     ; Build IP/TCP template
     call init_packet_template
@@ -1492,6 +1732,10 @@ _start:
     mov r14d, ecx
     xor ebx, ebx
     xor r13, r13
+    cmp byte [resume_flag], 0
+    je .resume_done
+    mov rbx, [resume_index]
+.resume_done:
     cmp byte [port_list_mode], 0
     je .check_top_ports_mode
     lea r13, [port_list_buf]
@@ -1505,6 +1749,11 @@ _start:
     movzx r15d, word [top_ports_n]
     xor r14d, r14d
 .scan_ready:
+    cmp byte [cidr_mode], 0
+    je .scan_ready_done
+    mov r15, [total_index_max]
+    xor r14d, r14d
+.scan_ready_done:
     ; fall through into scan loop (Part 3)
 
 ; ===========================================================================
@@ -1519,10 +1768,19 @@ scan_loop_entry:
 .scan_loop:
     cmp rbx, r15
     jae .scan_done
+    mov [resume_index], rbx
 
     mov rdi, rbx
     mov rsi, r15
     call blackrock_permute
+    cmp byte [cidr_mode], 0
+    je .port_select
+    call index_to_ip_port
+    mov eax, [current_scan_ip]
+    mov [packet_buf+16], eax
+    mov [sockaddr_dst+4], eax
+    jmp .port_ready
+.port_select:
     test r13, r13
     jz .range_port
     movzx ecx, word [r13 + rax*2]
@@ -1766,6 +2024,34 @@ scan_loop_entry:
     mov [bench_end_tsc], rax
 .skip_bench_end:
     call write_summary
+    cmp byte [wait_secs], 0
+    je .skip_wait
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    mov rbx, rax
+    movzx ecx, byte [wait_secs]
+    mov rax, [tsc_hz]
+    mul rcx
+    add rax, rbx
+    mov r12, rax
+.wait_loop:
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    cmp rax, r12
+    jae .skip_wait
+    mov rax, SYS_EPOLL_WAIT
+    mov rdi, [epoll_fd]
+    lea rsi, [epoll_out]
+    mov edx, 1
+    mov r10d, 1000
+    syscall
+    test rax, rax
+    jle .wait_loop
+    call recv_and_classify
+    jmp .wait_loop
+.skip_wait:
     cmp byte [json_mode], 0
     je .skip_json_footer
     call json_print_footer
@@ -1936,6 +2222,62 @@ append_u16:
     jnz .digits
     mov edx, ecx
     call buf_write
+    ret
+
+; -------------------------------------------------------------------
+; append_u32  eax=value
+; -------------------------------------------------------------------
+append_u32:
+    mov eax, eax
+    lea rsi, [out_buf+10]
+    xor rcx, rcx
+.digits32:
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    add dl, '0'
+    dec rsi
+    mov [rsi], dl
+    inc rcx
+    test eax, eax
+    jnz .digits32
+    mov edx, ecx
+    call buf_write
+    ret
+
+; -------------------------------------------------------------------
+; append_ip  eax=ipv4
+; -------------------------------------------------------------------
+append_ip:
+    push rbx
+    mov ebx, eax
+    movzx eax, bl
+    call append_u16
+    mov byte [out_buf], '.'
+    lea rsi, [out_buf]
+    mov edx, 1
+    call buf_write
+    mov eax, ebx
+    shr eax, 8
+    movzx eax, al
+    call append_u16
+    mov byte [out_buf], '.'
+    lea rsi, [out_buf]
+    mov edx, 1
+    call buf_write
+    mov eax, ebx
+    shr eax, 16
+    movzx eax, al
+    call append_u16
+    mov byte [out_buf], '.'
+    lea rsi, [out_buf]
+    mov edx, 1
+    call buf_write
+    mov eax, ebx
+    shr eax, 24
+    movzx eax, al
+    call append_u16
+    pop rbx
     ret
 
 ; -------------------------------------------------------------------
@@ -3035,6 +3377,577 @@ rate_gate:
     jmp .wait
 .store:
     mov [last_send_tsc], rax
+.done:
+    ret
+
+; -------------------------------------------------------------------
+; cookie_init
+; -------------------------------------------------------------------
+cookie_init:
+    rdtsc
+    shl  rdx, 32
+    or   rax, rdx
+    mov  [scan_seed], rax
+    ret
+
+; -------------------------------------------------------------------
+; cookie_generate
+; Input:  ecx = destination port (host order)
+;         rdi = destination IP
+; Output: eax = 32-bit cookie
+; -------------------------------------------------------------------
+cookie_generate:
+    push rbx
+    mov  rax, [local_ip]
+    xor  rax, rdi
+    movzx rbx, cx
+    xor  rax, rbx
+    xor  rax, [scan_seed]
+    mov  rbx, rax
+    shl  rbx, 13
+    xor  rax, rbx
+    mov  rbx, rax
+    shr  rbx, 7
+    xor  rax, rbx
+    mov  rbx, rax
+    shl  rbx, 17
+    xor  rax, rbx
+    and  eax, 0xFFFFFFFF
+    pop  rbx
+    ret
+
+; -------------------------------------------------------------------
+; cookie_verify
+; Input:  ecx = destination port (port we probed)
+;         edx = ack number from received SYN-ACK
+; Output: ZF=1 if valid response, ZF=0 if invalid
+; -------------------------------------------------------------------
+cookie_verify:
+    push rax
+    call cookie_generate
+    inc  eax
+    cmp  edx, eax
+    pop  rax
+    ret
+
+; -------------------------------------------------------------------
+; index_to_ip_port
+; Input:  rax = scan index
+; Output: ecx = port, [current_scan_ip] set
+; -------------------------------------------------------------------
+index_to_ip_port:
+    push rbx
+    push rdx
+    push rsi
+    push r8
+    push r9
+
+    ; port_count
+    movzx rbx, word [end_port]
+    movzx rcx, word [start_port]
+    sub  rbx, rcx
+    inc  rbx
+    cmp byte [port_list_mode], 0
+    je .check_top_ports
+    movzx rbx, word [port_list_count]
+    jmp .port_count_set
+.check_top_ports:
+    cmp byte [top_ports_mode], 0
+    je .port_count_set
+    movzx rbx, word [top_ports_n]
+.port_count_set:
+
+    xor  rdx, rdx
+    div  rbx                    ; rax = ip_idx, rdx = port_idx
+    push rdx
+
+    xor  r8d, r8d
+    xor  r9d, r9d
+.range_loop:
+    cmp  r9d, [ip_range_count]
+    jae  .range_done
+    lea  rsi, [ip_ranges + r9*8]
+    mov  ecx, [rsi+4]
+    add  ecx, r8d
+    cmp  eax, r8d
+    jb   .range_done
+    cmp  eax, ecx
+    jb   .found_range
+    mov  r8d, ecx
+    inc  r9d
+    jmp  .range_loop
+.found_range:
+    mov  ecx, [rsi]
+    sub  eax, r8d
+    add  ecx, eax
+    mov  [current_scan_ip], ecx
+.range_done:
+
+    pop  rdx
+    cmp byte [port_list_mode], 0
+    je .check_top_ports2
+    movzx ecx, word [port_list_buf + rdx*2]
+    jmp .done
+.check_top_ports2:
+    cmp byte [top_ports_mode], 0
+    je .range_port
+    mov rsi, [top_ports_ptr]
+    movzx ecx, word [rsi + rdx*2]
+    jmp .done
+.range_port:
+    movzx ecx, word [start_port]
+    add  ecx, edx
+.done:
+    pop  r9
+    pop  r8
+    pop  rsi
+    pop  rdx
+    pop  rbx
+    ret
+
+; -------------------------------------------------------------------
+; write_cstr  rsi=string
+; -------------------------------------------------------------------
+write_cstr:
+    xor edx, edx
+.len:
+    cmp byte [rsi+rdx], 0
+    je .done
+    inc edx
+    jmp .len
+.done:
+    call buf_write
+    ret
+
+; -------------------------------------------------------------------
+; scan_mode_name  al=scan_mode, returns rsi=ptr
+; -------------------------------------------------------------------
+scan_mode_name:
+    cmp al, SCAN_SYN
+    je .syn
+    cmp al, SCAN_ACK
+    je .ack
+    cmp al, SCAN_FIN
+    je .fin
+    cmp al, SCAN_NULL
+    je .null
+    cmp al, SCAN_XMAS
+    je .xmas
+    cmp al, SCAN_WINDOW
+    je .window
+    cmp al, SCAN_MAIMON
+    je .maimon
+    cmp al, SCAN_UDP
+    je .udp
+    cmp al, SCAN_PING
+    je .ping
+    cmp al, SCAN_SAR
+    je .sar
+    cmp al, SCAN_KIS
+    je .kis
+    cmp al, SCAN_PHANTOM
+    je .phantom
+    cmp al, SCAN_CALLBACK
+    je .callback
+    lea rsi, [scan_syn_str]
+    ret
+.syn:      lea rsi, [scan_syn_str]      ; fallthrough
+    ret
+.ack:      lea rsi, [scan_ack_str]
+    ret
+.fin:      lea rsi, [scan_fin_str]
+    ret
+.null:     lea rsi, [scan_null_str]
+    ret
+.xmas:     lea rsi, [scan_xmas_str]
+    ret
+.window:   lea rsi, [scan_window_str]
+    ret
+.maimon:   lea rsi, [scan_maimon_str]
+    ret
+.udp:      lea rsi, [scan_udp_str]
+    ret
+.ping:     lea rsi, [scan_ping_str]
+    ret
+.sar:      lea rsi, [scan_sar_str]
+    ret
+.kis:      lea rsi, [scan_kis_str]
+    ret
+.phantom:  lea rsi, [scan_phantom_str]
+    ret
+.callback: lea rsi, [scan_callback_str]
+    ret
+
+; -------------------------------------------------------------------
+; setup_sigint_handler
+; -------------------------------------------------------------------
+setup_sigint_handler:
+    sub  rsp, 152
+    lea  rax, [sigint_handler]
+    mov  [rsp], rax
+    mov  qword [rsp+8], 0
+    mov  qword [rsp+16], 0
+    mov  rax, SYS_RT_SIGACTION
+    mov  rdi, SIGINT
+    mov  rsi, rsp
+    xor  rdx, rdx
+    mov  r10, 8
+    syscall
+    add  rsp, 152
+    ret
+
+; -------------------------------------------------------------------
+; sigint_handler
+; -------------------------------------------------------------------
+sigint_handler:
+    call write_resume_file
+    lea  rsi, [resume_msg]
+    call write_cstr
+    call flush_output
+    mov  rax, SYS_EXIT
+    xor  rdi, rdi
+    syscall
+    ret
+
+; -------------------------------------------------------------------
+; write_resume_file
+; -------------------------------------------------------------------
+write_resume_file:
+    mov  rax, SYS_OPEN
+    lea  rdi, [resume_fname]
+    mov  rsi, O_WRONLY | O_CREAT | O_TRUNC
+    mov  rdx, 0644
+    syscall
+    test rax, rax
+    js   .done
+    mov  [resume_fd], rax
+    mov  qword [output_pos], 0
+    lea  rsi, [resume_idx_key]
+    call write_cstr
+    mov  eax, dword [resume_index]
+    call append_u32
+    lea  rsi, [resume_nl]
+    call write_cstr
+    lea  rsi, [resume_target_key]
+    call write_cstr
+    mov  eax, [target_ip]
+    call append_ip
+    lea  rsi, [resume_nl]
+    call write_cstr
+    lea  rsi, [resume_ports_key]
+    call write_cstr
+    movzx ax, word [start_port]
+    call append_u16
+    mov  byte [out_buf], '-'
+    lea  rsi, [out_buf]
+    mov  edx, 1
+    call buf_write
+    movzx ax, word [end_port]
+    call append_u16
+    lea  rsi, [resume_nl]
+    call write_cstr
+    lea  rsi, [resume_rate_key]
+    call write_cstr
+    mov  eax, [rate_value]
+    call append_u32
+    lea  rsi, [resume_nl]
+    call write_cstr
+    lea  rsi, [resume_scan_key]
+    call write_cstr
+    mov  al, [scan_mode]
+    call scan_mode_name
+    call write_cstr
+    lea  rsi, [resume_nl]
+    call write_cstr
+
+    mov  rax, SYS_WRITE
+    mov  rdi, [resume_fd]
+    lea  rsi, [output_buf]
+    mov  rdx, [output_pos]
+    syscall
+    mov  rax, SYS_CLOSE
+    mov  rdi, [resume_fd]
+    syscall
+    mov  qword [output_pos], 0
+.done:
+    ret
+
+; -------------------------------------------------------------------
+; read_resume_file
+; -------------------------------------------------------------------
+read_resume_file:
+    mov  rax, SYS_OPEN
+    lea  rdi, [resume_fname]
+    xor  rsi, rsi
+    syscall
+    test rax, rax
+    js   .done
+    mov  rbx, rax
+    mov  rax, SYS_READ
+    mov  rdi, rbx
+    lea  rsi, [config_buf]
+    mov  rdx, 4096
+    syscall
+    test rax, rax
+    jle  .close
+    lea  rsi, [config_buf]
+.line_loop:
+    cmp  byte [rsi], 0
+    je   .close
+    mov  rdi, rsi
+    ; find '='
+.find_eq:
+    mov  al, [rdi]
+    test al, al
+    jz   .next_line
+    cmp  al, '='
+    je   .got_eq
+    inc  rdi
+    jmp  .find_eq
+.got_eq:
+    mov  byte [rdi], 0
+    lea  rdi, [rsi]
+    cmp  dword [rdi], 'resu'
+    jne  .next_line
+    cmp  dword [rdi+4], 'me-i'
+    jne  .next_line
+    cmp  dword [rdi+8], 'ndex'
+    jne  .next_line
+    lea  rdi, [rdi+12]
+    ; skip spaces
+.skip_space:
+    cmp byte [rdi], ' '
+    jne .parse_val
+    inc rdi
+    jmp .skip_space
+.parse_val:
+    call parse_u32
+    mov  [resume_index], rax
+    mov  byte [resume_flag], 1
+.next_line:
+    ; advance to next line
+    mov  rdi, rsi
+.find_nl:
+    mov  al, [rdi]
+    test al, al
+    jz   .close
+    cmp  al, 10
+    je   .line_adv
+    inc  rdi
+    jmp  .find_nl
+.line_adv:
+    inc  rdi
+    mov  rsi, rdi
+    jmp  .line_loop
+.close:
+    mov  rax, SYS_CLOSE
+    mov  rdi, rbx
+    syscall
+.done:
+    ret
+
+; -------------------------------------------------------------------
+; load_config_file
+; -------------------------------------------------------------------
+load_config_file:
+    mov  rax, SYS_OPEN
+    lea  rdi, [config_filename]
+    xor  rsi, rsi
+    syscall
+    test rax, rax
+    js   .done
+    mov  rbx, rax
+    mov  rax, SYS_READ
+    mov  rdi, rbx
+    lea  rsi, [config_buf]
+    mov  rdx, 4096
+    syscall
+    test rax, rax
+    jle  .close
+    lea  rsi, [config_buf]
+.cfg_loop:
+    mov  al, [rsi]
+    test al, al
+    jz   .close
+    cmp  al, '#'
+    je   .skip_line
+    mov  rdi, rsi
+.find_eq2:
+    mov  al, [rdi]
+    test al, al
+    jz   .skip_line
+    cmp  al, '='
+    je   .cfg_eq
+    inc  rdi
+    jmp  .find_eq2
+.cfg_eq:
+    mov  byte [rdi], 0
+    lea  rdi, [rsi]
+    lea  r8, [rdi]
+    lea  rdi, [rsi]
+    ; scan key
+    cmp  dword [rdi], 'scan'
+    jne  .chk_rate
+    lea  rdi, [r8+5]
+    call parse_scan_mode
+    test al, al
+    jz   .skip_line
+    mov  [scan_mode], al
+    jmp  .skip_line
+.chk_rate:
+    cmp  dword [rdi], 'rate'
+    jne  .chk_ports
+    lea  rdi, [r8+5]
+    call parse_u32
+    test eax, eax
+    jz   .skip_line
+    mov  [rate_value], eax
+    jmp  .skip_line
+.chk_ports:
+    cmp  dword [rdi], 'port'
+    jne  .skip_line
+    lea  rdi, [r8+6]
+    call parse_port_range
+    test ax, ax
+    jz   .skip_line
+    mov  [start_port], ax
+    mov  [end_port], dx
+.skip_line:
+    ; advance to next line
+    mov  rdi, rsi
+.find_nl2:
+    mov  al, [rdi]
+    test al, al
+    jz   .close
+    cmp  al, 10
+    je   .line_adv2
+    inc  rdi
+    jmp  .find_nl2
+.line_adv2:
+    inc  rdi
+    mov  rsi, rdi
+    jmp  .cfg_loop
+.close:
+    mov  rax, SYS_CLOSE
+    mov  rdi, rbx
+    syscall
+.done:
+    ret
+
+; -------------------------------------------------------------------
+; print_echo_config
+; -------------------------------------------------------------------
+print_echo_config:
+    lea  rsi, [echo_hdr_msg]
+    call write_cstr
+    lea  rsi, [echo_target_msg]
+    call write_cstr
+    mov  eax, [target_ip]
+    call append_ip
+    lea  rsi, [newline_msg]
+    mov  edx, newline_len
+    call buf_write
+    lea  rsi, [echo_scan_msg]
+    call write_cstr
+    mov  al, [scan_mode]
+    call scan_mode_name
+    call write_cstr
+    lea  rsi, [newline_msg]
+    mov  edx, newline_len
+    call buf_write
+    lea  rsi, [echo_ports_msg]
+    call write_cstr
+    movzx ax, word [start_port]
+    call append_u16
+    mov  byte [out_buf], '-'
+    lea  rsi, [out_buf]
+    mov  edx, 1
+    call buf_write
+    movzx ax, word [end_port]
+    call append_u16
+    lea  rsi, [newline_msg]
+    mov  edx, newline_len
+    call buf_write
+    lea  rsi, [echo_rate_msg]
+    call write_cstr
+    mov  eax, [rate_value]
+    call append_u32
+    lea  rsi, [newline_msg]
+    mov  edx, newline_len
+    call buf_write
+    lea  rsi, [echo_engine_msg]
+    call write_cstr
+    movzx eax, byte [engine_mode]
+    call append_u16
+    lea  rsi, [newline_msg]
+    mov  edx, newline_len
+    call buf_write
+    lea  rsi, [echo_timing_msg]
+    call write_cstr
+    movzx eax, byte [timing_level]
+    call append_u16
+    lea  rsi, [newline_msg]
+    mov  edx, newline_len
+    call buf_write
+    call flush_output
+    mov  rax, SYS_EXIT
+    xor  rdi, rdi
+    syscall
+
+; -------------------------------------------------------------------
+; random_hosts_init
+; -------------------------------------------------------------------
+random_hosts_init:
+    mov byte [cidr_mode], 1
+    mov dword [ip_range_count], 0
+    mov qword [total_ip_count], 0
+    mov ecx, [random_host_count]
+    test ecx, ecx
+    jz .done
+.gen_loop:
+    call xorshift64_next
+    mov eax, eax
+    mov bl, al                    ; a
+    mov bh, ah                    ; b
+    cmp bl, 10
+    je .gen_loop
+    cmp bl, 127
+    je .gen_loop
+    cmp bl, 0
+    je .gen_loop
+    cmp bl, 224
+    jae .gen_loop
+    cmp bl, 172
+    jne .chk_192
+    movzx edx, bh
+    cmp edx, 16
+    jb .chk_192
+    cmp edx, 31
+    jbe .gen_loop
+.chk_192:
+    cmp bl, 192
+    jne .chk_ff
+    cmp bh, 168
+    je .gen_loop
+.chk_ff:
+    cmp eax, 0xFFFFFFFF
+    je .gen_loop
+    mov edx, [ip_range_count]
+    cmp edx, MAX_IP_RANGES
+    jae .done
+    lea rsi, [ip_ranges + rdx*8]
+    mov [rsi], eax
+    mov dword [rsi+4], 1
+    cmp dword [ip_range_count], 0
+    jne .count_up
+    mov [target_ip], eax
+    mov [current_scan_ip], eax
+.count_up:
+    inc dword [ip_range_count]
+    mov rbx, [total_ip_count]
+    inc rbx
+    mov [total_ip_count], rbx
+    loop .gen_loop
 .done:
     ret
 

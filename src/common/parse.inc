@@ -86,6 +86,86 @@ parse_port:
     ret
 
 ; ------------------------------------------------------------
+; parse_cidr
+; Input: rdi -> string "a.b.c.d/nn"
+; Output: eax=1 success, 0 fail
+; Stores: ip_ranges entry, ip_range_count, total_ip_count
+; ------------------------------------------------------------
+parse_cidr:
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    mov rsi, rdi
+.find_slash:
+    mov al, [rsi]
+    test al, al
+    jz .fail
+    cmp al, '/'
+    je .slash_found
+    inc rsi
+    jmp .find_slash
+.slash_found:
+    mov bl, [rsi]
+    mov byte [rsi], 0
+    call parse_ip
+    mov byte [rsi], bl
+    test eax, eax
+    jz .fail
+    mov ebx, eax                    ; parsed ip
+    lea rdi, [rsi+1]
+    call parse_u32
+    test eax, eax
+    jz .fail
+    cmp eax, 32
+    ja .fail
+    mov r8d, eax                    ; prefix
+    mov eax, 0xFFFFFFFF
+    test r8d, r8d
+    jz .mask_done
+    mov edx, 32
+    sub edx, r8d
+    mov cl, dl
+    shl eax, cl
+.mask_done:
+    and ebx, eax                    ; start_ip
+    mov edx, ebx
+    inc edx                         ; first_host
+
+    mov ecx, 32
+    sub ecx, r8d                    ; host bits
+    cmp ecx, 1
+    jbe .count_zero
+    mov rax, 1
+    mov cl, cl
+    shl rax, cl
+    sub rax, 2
+    jmp .count_done
+.count_zero:
+    xor rax, rax
+.count_done:
+    mov r9d, [ip_range_count]
+    cmp r9d, MAX_IP_RANGES
+    jae .fail
+    lea rsi, [ip_ranges + r9*8]
+    mov [rsi], edx                  ; first_host
+    mov [rsi+4], eax                ; count (low 32)
+    inc dword [ip_range_count]
+    mov rbx, [total_ip_count]
+    add rbx, rax
+    mov [total_ip_count], rbx
+    mov eax, 1
+    jmp .done
+.fail:
+    xor eax, eax
+.done:
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
+
+; ------------------------------------------------------------
 ; parse_port_range
 ; Input:  rdi -> "N" or "N-M"
 ; Output: ax = start, dx = end  (both 0 on error)

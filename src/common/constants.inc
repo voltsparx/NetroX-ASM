@@ -21,6 +21,7 @@
 %define SYS_CLOCK_GETTIME   228
 %define SYS_IOCTL           16
 %define SYS_EXIT            60
+%define SYS_RT_SIGACTION    13
 
 ; ============================================================
 ; Address families
@@ -267,5 +268,23 @@
 %define CB_DNS_PORT_BE          0x3500
 %define CB_NTP_PORT_BE          0x7B00
 %define CB_IDENT                0xCB4B
+
+; ============================================================
+; Stateless cookie
+; ============================================================
+%define COOKIE_ENABLED    1
+
+; ============================================================
+; CIDR range iteration
+; ============================================================
+%define MAX_IP_RANGES     128
+%define IP_RANGE_ENTRY    8
+
+; ============================================================
+; Resume/pause
+; ============================================================
+%define RESUME_FILE_NAME  "netrox-asm.resume", 0
+%define SYS_SIGNAL        48
+%define SIGINT            2
 
 %endif

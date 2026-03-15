@@ -19,6 +19,10 @@ build_syn_packet:
     call ip_checksum
     mov  [packet_buf+10], ax
 
+    mov  rdi, [current_scan_ip]
+    call cookie_generate
+    mov  [packet_buf+24], eax
+
     mov  bl, 0x02
     mov  al, [scan_mode]
     cmp  al, SCAN_SYN

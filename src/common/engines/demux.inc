@@ -25,8 +25,11 @@ recv_and_classify:
     jne .no_response
 
     mov eax, [rsi+12]
+    cmp byte [cidr_mode], 0
+    jne .src_ok
     cmp eax, [target_ip]
     jne .no_response
+.src_ok:
 
     movzx eax, byte [rsi]
     and al, 0x0F
@@ -36,6 +39,12 @@ recv_and_classify:
 
     movzx ecx, word [rdx]
     xchg cl, ch
+
+    mov  edx, [rdx+8]
+    bswap edx
+    mov  edi, [rsi+12]
+    call cookie_verify
+    jne  .no_response
 
     mov al, [rsi+8]
     mov [last_ttl], al

@@ -54,8 +54,8 @@ SECTION .data
 
 usage_msg   db "Usage: netrox-asm.exe <target_ip> [-p port|start-end|-]", 13, 10
             db "       [--rate N] [--scan MODE] [--bench] [--os]", 13, 10
-            db "       [--stabilize] [--about] [--wizard]", 13, 10
-            db "Scan modes: syn ack fin null xmas window maimon", 13, 10
+            db "       [--stabilize] [--about] [--wizard] [--callback]", 13, 10
+            db "Scan modes: syn ack fin null xmas window maimon udp ping sar kis phantom callback", 13, 10
 usage_len   equ $-usage_msg
 
 banner_msg  db "   _  __    __           _  __    ___   ______  ___", 13, 10
@@ -72,6 +72,205 @@ about_len   equ $-about_msg
 
 prompt_invalid    db "  Invalid input. Try again.", 10
 prompt_invalid_len equ $-prompt_invalid
+
+sar_hdr_msg       db "--- [ SAR RESONANCE SCAN: ", 0
+sar_hdr_end       db " ] ---", 10, 0
+sar_base_msg      db "Baseline RTT : ", 0
+sar_ns_msg        db "ns", 10, 0
+sar_limit_msg     db "Synaptic Lmt : ", 0
+sar_x_msg         db "x", 10, 0
+sar_col_hdr       db "PORT   DELTA    CLASS              BASELINE  MEASURED", 10, 0
+sar_col_sep       db "-----  -------  -----------------  --------  --------", 10, 0
+sar_sync_msg      db 10, "[SYNAPTIC SYNC] Cognitive load spike. Hard stop.", 10, 0
+sar_sum_hdr       db 10, "--- [ SAR COGNITIVE MAP COMPLETE ] ---", 10, 0
+sar_sum_audit     db "Ports audited   : ", 0
+sar_sum_none      db "Unmonitored     : ", 0
+sar_sum_acl       db "ACL/Stateful    : ", 0
+sar_sum_dpi       db "DPI detected    : ", 0
+sar_sum_ai        db "AI-EDR detected : ", 0
+sar_sum_proxy     db "Proxy detected  : ", 0
+sar_sum_syncs     db "Synaptic Syncs  : ", 0
+sar_status_stab   db "RESONANCE: STABLE", 10, 0
+sar_status_coll   db "RESONANCE: COLLAPSING", 10, 0
+sar_status_stor   db "RESONANCE: STORM", 10, 0
+sar_class_str_0   db "UNMONITORED      ", 0
+sar_class_str_1   db "STATELESS-ACL    ", 0
+sar_class_str_2   db "STATEFUL-FW      ", 0
+sar_class_str_3   db "DPI-LAYER        ", 0
+sar_class_str_4   db "AI-EDR           ", 0
+sar_class_str_5   db "TRANSPARENT-PROXY", 0
+sar_class_ptrs    dq sar_class_str_0, sar_class_str_1, sar_class_str_2
+                  dq sar_class_str_3, sar_class_str_4, sar_class_str_5
+
+sar_ntp_payload:
+    db 0x1B
+    times 47 db 0x00
+sar_ntp_len equ $ - sar_ntp_payload
+
+sar_synthetic_payload:
+    db 'G','E','T',' '
+    db 0x00,0x01,0x00,0x00
+    db 0x16,0x03,0x01,0x00
+    db 0xDE,0xAD,0xBE,0xEF
+sar_synthetic_len equ $ - sar_synthetic_payload
+
+kis_hdr_msg       db "--- [ KIS IMPEDANCE SCAN: ", 0
+kis_hdr_end       db " ] ---", 10, 0
+kis_ambient_msg   db "Ambient RTT  : ", 0
+kis_ttl_msg       db "  TTL=", 0
+kis_fuse_ok_msg   db "Thermal Fuse : INTACT", 10, 0
+kis_brake_msg     db 10, "[QUANTUM BRAKE] Thermal Fuse blown: ", 0
+kis_brake_end     db 10, 0
+kis_col_hdr       db "PORT   IMP(ns)  JITTER  STATE     SJS-ID      CONF", 10, 0
+kis_col_sep       db "-----  -------  ------  --------  ----------  ----", 10, 0
+kis_sum_hdr       db 10, "--- [ KIS IMPEDANCE REPORT ] ---", 10, 0
+kis_sum_closed    db "Closed        : ", 0
+kis_sum_filtered  db "Filtered      : ", 0
+kis_sum_open      db "Open          : ", 0
+kis_sum_heavy     db "Open-Heavy    : ", 0
+kis_sum_virt      db "Virtualized   : ", 0
+kis_sum_unknown   db "Unknown       : ", 0
+kis_hmap_hdr      db 10, "--- [ KIS HEAT MAP ] ---", 10, 0
+kis_ns_msg        db "ns", 0
+kis_pct_msg       db "%", 0
+
+kis_fuse_r1       db "TTL shift detected", 0
+kis_fuse_r2       db "Jitter explosion (>10%)", 0
+kis_fuse_r3       db "Impedance spike (>5x baseline)", 0
+kis_fuse_r4       db "Consecutive timeouts (5+)", 0
+kis_fuse_r5       db "Baseline drift (>15%)", 0
+kis_fuse_reason_ptrs:
+    dq 0
+    dq kis_fuse_r1, kis_fuse_r2, kis_fuse_r3
+    dq kis_fuse_r4, kis_fuse_r5
+
+kis_svc_str_0     db "UNKNOWN   ", 0
+kis_svc_str_1     db "CLOSED    ", 0
+kis_svc_str_2     db "FILTERED  ", 0
+kis_svc_str_3     db "OPEN      ", 0
+kis_svc_str_4     db "HTTP      ", 0
+kis_svc_str_5     db "HTTPS     ", 0
+kis_svc_str_6     db "SSH       ", 0
+kis_svc_str_7     db "DNS       ", 0
+kis_svc_str_8     db "DATABASE  ", 0
+kis_svc_str_9     db "OPEN-HEAVY", 0
+kis_svc_str_10    db "VIRTUAL   ", 0
+kis_svc_ptrs:
+    dq kis_svc_str_0,  kis_svc_str_1,  kis_svc_str_2
+    dq kis_svc_str_3,  kis_svc_str_4,  kis_svc_str_5
+    dq kis_svc_str_6,  kis_svc_str_7,  kis_svc_str_8
+    dq kis_svc_str_9,  kis_svc_str_10
+
+align 4
+kis_sjs_table:
+    dw  50,  200,   0,  10, KIS_SVC_CLOSED,   95
+    times 13 db 0
+    dw 200,  500,   0,  30, KIS_SVC_FILTERED, 80
+    times 13 db 0
+    dw 500,  900,  10,  40, KIS_SVC_OPEN_RAW, 70
+    times 13 db 0
+    dw 500,  800,  15,  35, KIS_SVC_HTTP,     75
+    times 13 db 0
+    dw 600,  950,  20,  50, KIS_SVC_HTTPS,    72
+    times 13 db 0
+    dw 700, 1100,  25,  60, KIS_SVC_SSH,      78
+    times 13 db 0
+    dw 500,  750,   5,  20, KIS_SVC_DNS,      82
+    times 13 db 0
+    dw 800, 1400,  30,  80, KIS_SVC_DB,       68
+    times 13 db 0
+    dw1200, 2500,  40, 120, KIS_SVC_HEAVY,    65
+    times 13 db 0
+    dw2500, 9999,  50, 500, KIS_SVC_VIRT,     60
+    times 13 db 0
+    dw 0, 0, 0, 0, 0, 0
+    times 13 db 0
+
+phantom_hdr_msg      db "--- [ PHANTOM SCAN: ", 0
+phantom_hdr_end      db " ] ---", 10, 0
+phantom_idle_msg     db "Idle RTT   : ", 0
+phantom_tev_msg      db "TEV Limit  : ", 0
+phantom_tev_pct      db "%", 10, 0
+phantom_listen_msg   db "Listen     : ", 0
+phantom_listen_sec   db "s (passive discovery)", 10, 0
+phantom_passive_msg  db "Passive    : ", 0
+phantom_passive_end  db " ports discovered", 10, 0
+phantom_col_hdr      db "PORT   STATE            METHOD     RTT(ns)  DEV%", 10, 0
+phantom_col_sep      db "-----  ---------------  ---------  -------  ----", 10, 0
+phantom_method_ack   db "ACK-WIN0 ", 0
+phantom_method_obs   db "OBSERVED ", 0
+phantom_state_popen  db "OPEN (PASSIVE) ", 0
+phantom_state_open   db "OPEN           ", 0
+phantom_state_closed db "CLOSED         ", 0
+phantom_state_filt   db "FILTERED       ", 0
+phantom_tev_alert    db 10, "[TEV HARD STOP] Processing fatigue detected.", 10, 0
+phantom_tev_dev_msg  db "Deviation: ", 0
+phantom_tev_thr_msg  db "% (threshold: ", 0
+phantom_tev_end_msg  db "%)", 10, 0
+phantom_sum_hdr      db 10, "--- [ PHANTOM SCAN COMPLETE ] ---", 10, 0
+phantom_sum_passive  db "Passive open  : ", 0
+phantom_sum_open     db "Probed open   : ", 0
+phantom_sum_closed   db "Closed        : ", 0
+phantom_sum_filtered db "Filtered      : ", 0
+phantom_sum_tev      db "TEV triggers  : ", 0
+phantom_sum_bytes    db "Footprint     : ", 0
+phantom_sum_bytes_e  db " bytes", 10, 0
+phantom_tev_ok_msg   db "TEV Status    : INTACT", 10, 0
+phantom_tev_bad_msg  db "TEV Status    : TRIGGERED", 10, 0
+phantom_plus_msg     db "+", 0
+phantom_timeout_str  db "timeout", 0
+phantom_dash_msg     db "-", 0
+phantom_ns_msg       db "ns", 0
+
+cb_hdr_msg        db "--- [ CALLBACK-PING MONITOR: ACTIVE ] ---", 10, 0
+cb_proto_msg      db "Protocol    : ", 0
+cb_timeout_msg    db "Timeout     : ", 0
+cb_ms_msg         db "ms", 10, 0
+cb_prefix_msg     db "[CB] ", 0
+cb_trigger_syn    db "TRIGGER=SYN  ", 0
+cb_trigger_icmp   db "TRIGGER=ICMP ", 0
+cb_trigger_udp    db "TRIGGER=UDP  ", 0
+cb_proto_dns_str  db "PROTO=DNS  ", 0
+cb_proto_ntp_str  db "PROTO=NTP  ", 0
+cb_proto_icmp_str db "PROTO=ICMP ", 0
+cb_proto_ack_str  db "PROTO=ACK  ", 0
+cb_class_silent   db "CLASS=SILENT     ", 0
+cb_class_std      db "CLASS=STANDARD   ", 0
+cb_class_resp     db "CLASS=RESPONSIVE ", 0
+cb_class_delayed  db "CLASS=DELAYED    ", 0
+cb_lat_msg        db "LATENCY=", 0
+cb_lat_timeout    db "timeout", 0
+cb_os_msg         db "OS=", 0
+cb_ttl_msg        db "TTL=", 0
+cb_sum_hdr        db 10, "--- [ CALLBACK-PING REPORT ] ---", 10, 0
+cb_sum_total      db "Total callbacks : ", 0
+cb_sum_silent     db "Silent drops    : ", 0
+cb_sum_standard   db "Standard resp   : ", 0
+cb_sum_responsive db "Protocol resp   : ", 0
+cb_sum_delayed    db "Delayed resp    : ", 0
+cb_sum_os_hdr     db "OS breakdown    :", 10, 0
+cb_sum_linux      db "  Linux         : ", 0
+cb_sum_windows    db "  Windows       : ", 0
+cb_sum_macos      db "  macOS         : ", 0
+cb_sum_device     db "  Device        : ", 0
+cb_sum_unknown    db "  Unknown       : ", 0
+
+align 4
+cb_dns_payload:
+    db 0xCB, 0x4B
+    db 0x01, 0x00
+    db 0x00, 0x01
+    db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    db 8,'c','a','l','l','b','a','c','k'
+    db 5,'l','o','c','a','l', 0
+    db 0x00, 0x01
+    db 0x00, 0x01
+cb_dns_len equ $ - cb_dns_payload
+
+cb_ntp_payload:
+    db 0x1B
+    times 47 db 0x00
+cb_ntp_len equ $ - cb_ntp_payload
 
 wizard_hdr      db 10, "  NetroX-ASM Wizard", 10
                 db "  ---------------------", 10
@@ -447,6 +646,154 @@ csv_mode            resb 1
 output_fd           resq 1
 output_filename     resb 256
 
+; SAR engine state
+sar_enabled         resb 1
+sar_baseline_ns     resq 1
+sar_baseline_samples resq 5
+sar_synced          resb 1
+sar_synaptic_limit  resw 1
+sar_class           resb 1
+sar_delta_history   resw 8
+sar_delta_hist_idx  resb 1
+sar_timeout_streak  resb 1
+sar_rtt_samples     resq 3
+sar_rtt_idx         resb 1
+sar_t_send          resq 1
+sar_t_recv          resq 1
+sar_chameleon_ns    resq 1
+sar_synthetic_ns    resq 1
+sar_delta_display   resb 1
+
+sar_count_none      resd 1
+sar_count_acl       resd 1
+sar_count_stateful  resd 1
+sar_count_dpi       resd 1
+sar_count_ai        resd 1
+sar_count_proxy     resd 1
+sar_count_syncs     resd 1
+sar_count_total     resd 1
+sar_results         resb 65535 * 16
+waveform_buf        resb 80
+waveform_col        resb 1
+
+; KIS engine state
+kis_enabled          resb 1
+kis_fuse_blown       resb 1
+kis_fuse_reason      resb 1
+kis_ambient_ns       resq 1
+kis_ambient_ttl      resb 1
+kis_ambient_samples  resq 8
+kis_jitter_baseline  resq 1
+kis_recheck_counter  resb 1
+kis_timeout_streak   resb 1
+kis_baseline_orig    resq 1
+kis_closed_ref_ns    resq 1
+kis_t_send           resq 1
+kis_t_recv           resq 1
+kis_svc_id           resw 1
+kis_confidence       resb 1
+kis_probe_samples    resq 5
+kis_port_impedance   resq 1
+kis_port_jitter      resq 1
+
+kis_count_closed     resd 1
+kis_count_filtered   resd 1
+kis_count_open       resd 1
+kis_count_heavy      resd 1
+kis_count_virt       resd 1
+kis_count_unknown    resd 1
+kis_count_total      resd 1
+
+kis_results          resb 65535 * 24
+kis_heatmap_buf      resb 65535
+
+; Phantom engine state
+phantom_enabled           resb 1
+phantom_tev_threshold     resb 1
+phantom_idle_rtt          resq 1
+phantom_listen_secs       resb 1
+phantom_burst_window_ns   resq 1
+phantom_jitter_min_us     resd 1
+phantom_jitter_max_us     resd 1
+phantom_last_ambient_tsc  resq 1
+phantom_bytes_sent        resq 1
+phantom_pkts_sent         resd 1
+phantom_t_send            resq 1
+phantom_t_recv            resq 1
+phantom_probe_rtt         resq 1
+phantom_port_state        resb 1
+passive_open_map          resb 8192
+passive_port_count        resd 1
+
+tev_history               resw 8
+tev_history_idx           resb 1
+tev_consecutive_to        resb 1
+tev_triggered             resb 1
+
+phantom_count_passive     resd 1
+phantom_count_open        resd 1
+phantom_count_closed      resd 1
+phantom_count_filtered    resd 1
+phantom_count_tev         resd 1
+phantom_count_total       resd 1
+
+; Callback engine state
+cb_enabled            resb 1
+cb_secondary_enabled  resb 1
+cb_proto              resb 1
+cb_response_timeout   resd 1
+cb_t_send             resq 1
+cb_t_recv             resq 1
+cb_latency_ns         resq 1
+cb_class              resb 1
+cb_src_ip             resd 1
+cb_src_port           resw 1
+cb_trigger_proto      resb 1
+
+cb_queue              resb 128
+cb_queue_head         resb 1
+cb_queue_tail         resb 1
+cb_queue_count        resb 1
+cb_subnet_seen        resb 8192
+
+cb_count_total        resd 1
+cb_count_silent       resd 1
+cb_count_standard     resd 1
+cb_count_responsive   resd 1
+cb_count_delayed      resd 1
+cb_count_linux        resd 1
+cb_count_windows      resd 1
+cb_count_macos        resd 1
+cb_count_device       resd 1
+cb_count_unknown_os   resd 1
+
+; Cookie/CIDR compatibility
+scan_seed     resq 1
+local_ip      resd 1
+cidr_mode     resb 1
+current_scan_ip resd 1
+ip_ranges         resb MAX_IP_RANGES * IP_RANGE_ENTRY
+ip_range_count    resd 1
+total_ip_count    resq 1
+total_index_max   resq 1
+
+resume_index      resq 1
+resume_filename   resb 256
+resume_enabled    resb 1
+resume_flag       resb 1
+resume_fd         resq 1
+
+config_filename   resb 256
+config_enabled    resb 1
+config_buf        resb 4096
+
+wait_secs         resb 1
+banners_mode      resb 1
+echo_mode         resb 1
+random_host_count resd 1
+version_enabled   resb 1
+quiet_mode        resb 1
+
 ; ===========================================================================
 ; NetroX-ASM  |  Windows x86_64  |  Part 2 of 4: _start, args, init, scan loop
 ; ===========================================================================
@@ -513,6 +860,7 @@ _start:
     test eax, eax
     jz .usage
     mov [target_ip], eax
+    mov [current_scan_ip], eax
     lea rsi, [rsi]
     lea rdi, [wiz_target_str]
     mov ecx, 15
@@ -900,10 +1248,13 @@ _start:
     call get_local_ip
     test eax, eax
     jnz .error
+    mov eax, [source_ip]
+    mov [local_ip], eax
 
     call init_rate
     call blackrock_init
     call intel_init
+    call cookie_init
     rdtsc
     shl rdx, 32
     or rax, rdx
@@ -2349,6 +2700,56 @@ rate_gate:
 .store:
     mov [last_send_tsc], rax
 .done:
+    ret
+
+; -------------------------------------------------------------------
+; cookie_init
+; -------------------------------------------------------------------
+cookie_init:
+    rdtsc
+    shl  rdx, 32
+    or   rax, rdx
+    mov  [scan_seed], rax
+    ret
+
+; -------------------------------------------------------------------
+; cookie_generate
+; Input:  ecx = destination port (host order)
+;         rdi = destination IP
+; Output: eax = 32-bit cookie
+; -------------------------------------------------------------------
+cookie_generate:
+    push rbx
+    mov  rax, [local_ip]
+    xor  rax, rdi
+    movzx rbx, cx
+    xor  rax, rbx
+    xor  rax, [scan_seed]
+    mov  rbx, rax
+    shl  rbx, 13
+    xor  rax, rbx
+    mov  rbx, rax
+    shr  rbx, 7
+    xor  rax, rbx
+    mov  rbx, rax
+    shl  rbx, 17
+    xor  rax, rbx
+    and  eax, 0xFFFFFFFF
+    pop  rbx
+    ret
+
+; -------------------------------------------------------------------
+; cookie_verify
+; Input:  ecx = destination port
+;         edx = ack number
+; Output: ZF=1 if valid response
+; -------------------------------------------------------------------
+cookie_verify:
+    push rax
+    call cookie_generate
+    inc  eax
+    cmp  edx, eax
+    pop  rax
     ret
 
 ; -------------------------------------------------------------------
