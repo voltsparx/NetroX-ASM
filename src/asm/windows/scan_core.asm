@@ -9,6 +9,9 @@ default rel
 %ifndef SOCKET_ERROR
 %define SOCKET_ERROR -1
 %endif
+%ifndef INVALID_SOCKET
+%define INVALID_SOCKET -1
+%endif
 
 ; ScanConfig offsets (must match include/netrox_abi.h)
 %define CFG_TARGET_IP        0
@@ -78,6 +81,7 @@ tsc_hz          resq 1
 scan_done_flag  resb 1
 scan_seed       resq 1
 local_ip        resd 1
+xorshift_state  resq 1
 blackrock_key_0 resq 1
 blackrock_key_1 resq 1
 blackrock_key_2 resq 1
@@ -93,7 +97,6 @@ rate_max_cycles resq 1
 SECTION .text
 global asm_scan_init
 global asm_scan_run
-global asm_get_local_ip
 global asm_get_tsc_hz
 global asm_scan_cleanup
 
@@ -114,17 +117,104 @@ asm_scan_init:
     mov [retry_max], al
     mov al, [rdi + CFG_STAB_ENABLED]
     mov [stab_enabled], al
+    ; local IP: from cfg if provided, else discover
+    mov eax, [rdi + CFG_LOCAL_IP]
+    mov [local_ip], eax
+    test eax, eax
+    jnz .have_local_ip
+    call asm_get_local_ip
+.have_local_ip:
+    mov eax, [local_ip]
+    mov [source_ip], eax
+
+    ; WSAStartup
+    sub rsp, 40
+    mov ecx, 0x0202
+    lea rdx, [wsa_data]
+    call WSAStartup
+    add rsp, 40
+
+    call setup_sigint_handler
+    call blackrock_init
+    call cookie_init
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    mov [xorshift_state], rax
     xor eax, eax
     ret
 
 asm_scan_run:
-    ; TODO: full init/dispatch
-    ; Scan loop extracted from legacy (no output calls, uses callbacks)
+    ; open raw socket if needed
+    mov rax, [sock_fd]
+    cmp rax, INVALID_SOCKET
+    jne .sock_ready
+    sub rsp, 40
+    mov ecx, AF_INET
+    mov edx, SOCK_RAW
+    mov r8d, IPPROTO_TCP
+    call socket
+    add rsp, 40
+    cmp rax, INVALID_SOCKET
+    je .scan_fail
+    mov [sock_fd], rax
+
+    sub rsp, 40
+    mov rcx, [sock_fd]
+    mov edx, IPPROTO_IP
+    mov r8d, IP_HDRINCL
+    lea r9, [hdrincl]
+    mov dword [rsp+32], 4
+    call setsockopt
+    add rsp, 40
+
+    sub rsp, 40
+    mov rcx, [sock_fd]
+    mov edx, SOL_SOCKET
+    mov r8d, SO_RCVTIMEO
+    lea r9, [timeout_ms]
+    mov dword [rsp+32], 4
+    call setsockopt
+    add rsp, 40
+.sock_ready:
+    call init_packet_template
+
+    mov word [sockaddr_dst], AF_INET
+    mov eax, [target_ip]
+    mov [sockaddr_dst+4], eax
+
+    movzx ecx, word [start_port]
+    movzx r15d, word [end_port]
+    mov r14d, r15d
+    sub r14d, ecx
+    inc r14d
+    mov r15d, r14d
+    mov r14d, ecx
+    xor ebx, ebx
+    xor r13, r13
+    cmp byte [port_list_mode], 0
+    je .check_top_ports_mode
+    lea r13, [port_list_buf]
+    movzx r15d, word [port_list_count]
+    xor r14d, r14d
+    jmp .scan_ready
+.check_top_ports_mode:
+    cmp byte [top_ports_mode], 0
+    je .scan_ready
+    mov r13, [top_ports_ptr]
+    movzx r15d, word [top_ports_n]
+    xor r14d, r14d
+.scan_ready:
+    cmp byte [cidr_mode], 0
+    je .scan_ready_done
+    mov r15, [total_index_max]
+    xor r14d, r14d
+.scan_ready_done:
+    call scan_loop_entry
     xor eax, eax
     ret
-
-asm_get_local_ip:
-    xor eax, eax
+.scan_fail:
+    mov eax, 1
     ret
 
 asm_get_tsc_hz:
@@ -170,6 +260,23 @@ cookie_verify:
     inc  eax
     cmp  edx, eax
     pop  rax
+    ret
+
+; -------------------------------------------------------------------
+; xorshift64_next
+; -------------------------------------------------------------------
+xorshift64_next:
+    mov rax, [xorshift_state]
+    mov rbx, rax
+    shl rbx, 13
+    xor rax, rbx
+    mov rbx, rax
+    shr rbx, 7
+    xor rax, rbx
+    mov rbx, rax
+    shl rbx, 17
+    xor rax, rbx
+    mov [xorshift_state], rax
     ret
 
 ; -------------------------------------------------------------------
@@ -599,8 +706,13 @@ scan_loop_entry:
 %include "../common/intelligence.inc"
 %include "../common/engines/dispatch.inc"
 
+extern asm_get_local_ip
+extern setup_sigint_handler
+extern WSAStartup
+extern socket
+extern setsockopt
+extern closesocket
 extern sendto
 extern recvfrom
-extern SOCKET_ERROR
 
 %endif

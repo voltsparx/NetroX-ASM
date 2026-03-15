@@ -17,7 +17,61 @@ global setup_sigint_handler
 global sigint_handler
 
 asm_get_local_ip:
+    push rbx
+    sub rsp, 40
+    mov ecx, AF_INET
+    mov edx, SOCK_DGRAM
+    mov r8d, IPPROTO_UDP
+    call socket
+    add rsp, 40
+    cmp rax, INVALID_SOCKET
+    je .fail
+    mov rbx, rax
+
+    mov word [sockaddr_tmp], AF_INET
+    mov word [sockaddr_tmp+2], 0x3500
+    mov eax, [target_ip]
+    mov [sockaddr_tmp+4], eax
+
+    sub rsp, 40
+    mov rcx, rbx
+    lea rdx, [sockaddr_tmp]
+    mov r8d, 16
+    call connect
+    add rsp, 40
+    test eax, eax
+    jne .cleanup
+
+    mov dword [addrlen], 16
+    sub rsp, 40
+    mov rcx, rbx
+    lea rdx, [sockaddr_local]
+    lea r8, [addrlen]
+    call getsockname
+    add rsp, 40
+    test eax, eax
+    jne .cleanup
+
+    mov eax, [sockaddr_local+4]
+    mov [source_ip], eax
+    mov [local_ip], eax
+
+    sub rsp, 40
+    mov rcx, rbx
+    call closesocket
+    add rsp, 40
+    pop rbx
     xor eax, eax
+    ret
+
+.cleanup:
+    sub rsp, 40
+    mov rcx, rbx
+    call closesocket
+    add rsp, 40
+.fail:
+    pop rbx
+    mov eax, 1
     ret
 
 asm_host_probe:
@@ -100,6 +154,10 @@ sigint_handler:
 extern sendto
 extern recvfrom
 extern SetConsoleCtrlHandler
-extern SOCKET_ERROR
+extern socket
+extern connect
+extern getsockname
+extern closesocket
+extern local_ip
 
 %endif

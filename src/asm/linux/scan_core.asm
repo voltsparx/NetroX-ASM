@@ -60,9 +60,11 @@ SECTION .text
 
 global asm_scan_init
 global asm_scan_run
-global asm_get_local_ip
 global asm_get_tsc_hz
 global asm_scan_cleanup
+extern asm_get_local_ip
+extern setup_send_engine
+extern setup_sigint_handler
 
 ; ------------------------------------------------------------
 ; asm_scan_init
