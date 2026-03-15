@@ -38,6 +38,81 @@ engine_run:
     call cb_run
     ret
 .not_callback:
+    cmp  byte [scan_mode], SCAN_CONNECT
+    jne  .not_connect
+    call connect_run
+    ret
+.not_connect:
+    cmp  byte [scan_mode], SCAN_IDLE
+    jne  .not_idle
+    call idle_run
+    ret
+.not_idle:
+    cmp  byte [scan_mode], SCAN_IPROTO
+    jne  .not_iproto
+    call iproto_run
+    ret
+.not_iproto:
+    cmp  byte [scan_mode], SCAN_PINGSWEEP
+    jne  .not_pingsweep
+    call pingsweep_run
+    ret
+.not_pingsweep:
+    cmp  byte [scan_mode], SCAN_LIST
+    jne  .not_list
+    call list_run
+    ret
+.not_list:
+    cmp  byte [scan_mode], SCAN_RPC
+    jne  .not_rpc
+    call rpc_run
+    ret
+.not_rpc:
+    cmp  byte [scan_mode], SCAN_SCTP_INIT
+    jne  .not_sctp_init
+    call sctp_init_run
+    ret
+.not_sctp_init:
+    cmp  byte [scan_mode], SCAN_SCTP_ECHO
+    jne  .not_sctp_echo
+    call sctp_echo_run
+    ret
+.not_sctp_echo:
+    cmp  byte [scan_mode], SCAN_FTP_BOUNCE
+    jne  .not_ftp
+    call ftp_bounce_run
+    ret
+.not_ftp:
+    cmp  byte [scan_mode], SCAN_SCRIPT
+    jne  .not_script
+    call script_run
+    ret
+.not_script:
+    cmp  byte [scan_mode], SCAN_AGGRESSIVE
+    jne  .not_aggressive
+    call aggressive_run
+    ret
+.not_aggressive:
+    cmp  byte [scan_mode], SCAN_SEQ
+    jne  .not_seq
+    call seq_run
+    ret
+.not_seq:
+    cmp  byte [scan_mode], SCAN_ICMP_TS
+    jne  .not_icmp_ts
+    call icmp_ts_run
+    ret
+.not_icmp_ts:
+    cmp  byte [scan_mode], SCAN_ICMP_NM
+    jne  .not_icmp_nm
+    call icmp_nm_run
+    ret
+.not_icmp_nm:
+    cmp  byte [scan_mode], SCAN_ARP
+    jne  .not_arp
+    call arp_run
+    ret
+.not_arp:
     ret
 
 print_engine_status:

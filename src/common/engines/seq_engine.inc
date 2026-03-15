@@ -5,6 +5,11 @@
 %ifndef SEQ_ENGINE_INC
 %define SEQ_ENGINE_INC 1
 
-; TODO: implement scan engine logic per self-assessment/all_scans.txt
+; ------------------------------------------------------------
+; seq_run
+; Sequential scan order (placeholder: uses existing loop)
+; ------------------------------------------------------------
+seq_run:
+    jmp scan_loop_entry
 
 %endif

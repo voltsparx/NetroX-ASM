@@ -86,6 +86,49 @@ parse_port:
     ret
 
 ; ------------------------------------------------------------
+; parse_ip_port
+; Input:  rdi -> string "a.b.c.d:port"
+; Output: eax=ip (host), dx=port (host), eax=0 on error
+; ------------------------------------------------------------
+parse_ip_port:
+    push rbx
+    push rcx
+    mov rbx, rdi
+    xor rcx, rcx
+.find_colon:
+    mov al, [rbx+rcx]
+    test al, al
+    jz .fail
+    cmp al, ':'
+    je .split
+    inc rcx
+    jmp .find_colon
+.split:
+    mov byte [rbx+rcx], 0
+    mov rdi, rbx
+    call parse_ip
+    test eax, eax
+    jz .restore_fail
+    mov r8d, eax
+    lea rdi, [rbx+rcx+1]
+    call parse_port
+    test ax, ax
+    jz .restore_fail
+    mov dx, ax
+    mov eax, r8d
+    mov byte [rbx+rcx], ':'
+    pop rcx
+    pop rbx
+    ret
+.restore_fail:
+    mov byte [rbx+rcx], ':'
+.fail:
+    xor eax, eax
+    pop rcx
+    pop rbx
+    ret
+
+; ------------------------------------------------------------
 ; parse_cidr
 ; Input: rdi -> string "a.b.c.d/nn"
 ; Output: eax=1 success, 0 fail
@@ -518,7 +561,7 @@ parse_scan_mode:
     ret
 .scan_callback:
     cmp  al, 'c'
-    jne  .invalid
+    jne  .scan_connect
     cmp  byte [rdi+1], 'a'
     jne  .invalid
     cmp  byte [rdi+2], 'l'
@@ -536,6 +579,268 @@ parse_scan_mode:
     cmp  byte [rdi+8], 0
     jne  .invalid
     mov  al, SCAN_CALLBACK
+    pop  rbx
+    ret
+.scan_connect:
+    cmp  al, 'c'
+    jne  .scan_idle
+    cmp  byte [rdi+1], 'o'
+    jne  .scan_idle
+    cmp  byte [rdi+2], 'n'
+    jne  .scan_idle
+    cmp  byte [rdi+3], 'n'
+    jne  .scan_idle
+    cmp  byte [rdi+4], 'e'
+    jne  .scan_idle
+    cmp  byte [rdi+5], 'c'
+    jne  .scan_idle
+    cmp  byte [rdi+6], 't'
+    jne  .scan_idle
+    cmp  byte [rdi+7], 0
+    jne  .scan_idle
+    mov  al, SCAN_CONNECT
+    pop  rbx
+    ret
+.scan_idle:
+    cmp  al, 'i'
+    jne  .scan_iproto
+    cmp  byte [rdi+1], 'd'
+    jne  .scan_iproto
+    cmp  byte [rdi+2], 'l'
+    jne  .scan_iproto
+    cmp  byte [rdi+3], 'e'
+    jne  .scan_iproto
+    cmp  byte [rdi+4], 0
+    jne  .scan_iproto
+    mov  al, SCAN_IDLE
+    pop  rbx
+    ret
+.scan_iproto:
+    cmp  al, 'i'
+    jne  .scan_pingsweep
+    cmp  byte [rdi+1], 'p'
+    jne  .scan_pingsweep
+    cmp  byte [rdi+2], 'r'
+    jne  .scan_pingsweep
+    cmp  byte [rdi+3], 'o'
+    jne  .scan_pingsweep
+    cmp  byte [rdi+4], 't'
+    jne  .scan_pingsweep
+    cmp  byte [rdi+5], 'o'
+    jne  .scan_pingsweep
+    cmp  byte [rdi+6], 0
+    jne  .scan_pingsweep
+    mov  al, SCAN_IPROTO
+    pop  rbx
+    ret
+.scan_pingsweep:
+    cmp  al, 'p'
+    jne  .scan_list
+    cmp  byte [rdi+1], 'i'
+    jne  .scan_list
+    cmp  byte [rdi+2], 'n'
+    jne  .scan_list
+    cmp  byte [rdi+3], 'g'
+    jne  .scan_list
+    cmp  byte [rdi+4], 's'
+    jne  .scan_list
+    cmp  byte [rdi+5], 'w'
+    jne  .scan_list
+    cmp  byte [rdi+6], 'e'
+    jne  .scan_list
+    cmp  byte [rdi+7], 'e'
+    jne  .scan_list
+    cmp  byte [rdi+8], 'p'
+    jne  .scan_list
+    cmp  byte [rdi+9], 0
+    jne  .scan_list
+    mov  al, SCAN_PINGSWEEP
+    pop  rbx
+    ret
+.scan_list:
+    cmp  al, 'l'
+    jne  .scan_rpc
+    cmp  byte [rdi+1], 'i'
+    jne  .scan_rpc
+    cmp  byte [rdi+2], 's'
+    jne  .scan_rpc
+    cmp  byte [rdi+3], 't'
+    jne  .scan_rpc
+    cmp  byte [rdi+4], 0
+    jne  .scan_rpc
+    mov  al, SCAN_LIST
+    pop  rbx
+    ret
+.scan_rpc:
+    cmp  al, 'r'
+    jne  .scan_sctp_init
+    cmp  byte [rdi+1], 'p'
+    jne  .scan_sctp_init
+    cmp  byte [rdi+2], 'c'
+    jne  .scan_sctp_init
+    cmp  byte [rdi+3], 0
+    jne  .scan_sctp_init
+    mov  al, SCAN_RPC
+    pop  rbx
+    ret
+.scan_sctp_init:
+    cmp  al, 's'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+1], 'c'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+2], 't'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+3], 'p'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+4], 'i'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+5], 'n'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+6], 'i'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+7], 't'
+    jne  .scan_sctp_echo
+    cmp  byte [rdi+8], 0
+    jne  .scan_sctp_echo
+    mov  al, SCAN_SCTP_INIT
+    pop  rbx
+    ret
+.scan_sctp_echo:
+    cmp  al, 's'
+    jne  .scan_ftp
+    cmp  byte [rdi+1], 'c'
+    jne  .scan_ftp
+    cmp  byte [rdi+2], 't'
+    jne  .scan_ftp
+    cmp  byte [rdi+3], 'p'
+    jne  .scan_ftp
+    cmp  byte [rdi+4], 'e'
+    jne  .scan_ftp
+    cmp  byte [rdi+5], 'c'
+    jne  .scan_ftp
+    cmp  byte [rdi+6], 'h'
+    jne  .scan_ftp
+    cmp  byte [rdi+7], 'o'
+    jne  .scan_ftp
+    cmp  byte [rdi+8], 0
+    jne  .scan_ftp
+    mov  al, SCAN_SCTP_ECHO
+    pop  rbx
+    ret
+.scan_ftp:
+    cmp  al, 'f'
+    jne  .scan_script
+    cmp  byte [rdi+1], 't'
+    jne  .scan_script
+    cmp  byte [rdi+2], 'p'
+    jne  .scan_script
+    cmp  byte [rdi+3], 0
+    jne  .scan_script
+    mov  al, SCAN_FTP_BOUNCE
+    pop  rbx
+    ret
+.scan_script:
+    cmp  al, 's'
+    jne  .scan_aggressive
+    cmp  byte [rdi+1], 'c'
+    jne  .scan_aggressive
+    cmp  byte [rdi+2], 'r'
+    jne  .scan_aggressive
+    cmp  byte [rdi+3], 'i'
+    jne  .scan_aggressive
+    cmp  byte [rdi+4], 'p'
+    jne  .scan_aggressive
+    cmp  byte [rdi+5], 't'
+    jne  .scan_aggressive
+    cmp  byte [rdi+6], 0
+    jne  .scan_aggressive
+    mov  al, SCAN_SCRIPT
+    pop  rbx
+    ret
+.scan_aggressive:
+    cmp  al, 'a'
+    jne  .scan_seq
+    cmp  byte [rdi+1], 'g'
+    jne  .scan_seq
+    cmp  byte [rdi+2], 'g'
+    jne  .scan_seq
+    cmp  byte [rdi+3], 'r'
+    jne  .scan_seq
+    cmp  byte [rdi+4], 'e'
+    jne  .scan_seq
+    cmp  byte [rdi+5], 's'
+    jne  .scan_seq
+    cmp  byte [rdi+6], 's'
+    jne  .scan_seq
+    cmp  byte [rdi+7], 'i'
+    jne  .scan_seq
+    cmp  byte [rdi+8], 'v'
+    jne  .scan_seq
+    cmp  byte [rdi+9], 'e'
+    jne  .scan_seq
+    cmp  byte [rdi+10], 0
+    jne  .scan_seq
+    mov  al, SCAN_AGGRESSIVE
+    pop  rbx
+    ret
+.scan_seq:
+    cmp  al, 's'
+    jne  .scan_icmp_ts
+    cmp  byte [rdi+1], 'e'
+    jne  .scan_icmp_ts
+    cmp  byte [rdi+2], 'q'
+    jne  .scan_icmp_ts
+    cmp  byte [rdi+3], 0
+    jne  .scan_icmp_ts
+    mov  al, SCAN_SEQ
+    pop  rbx
+    ret
+.scan_icmp_ts:
+    cmp  al, 'i'
+    jne  .scan_icmp_nm
+    cmp  byte [rdi+1], 'c'
+    jne  .scan_icmp_nm
+    cmp  byte [rdi+2], 'm'
+    jne  .scan_icmp_nm
+    cmp  byte [rdi+3], 'p'
+    jne  .scan_icmp_nm
+    cmp  byte [rdi+4], 't'
+    jne  .scan_icmp_nm
+    cmp  byte [rdi+5], 's'
+    jne  .scan_icmp_nm
+    cmp  byte [rdi+6], 0
+    jne  .scan_icmp_nm
+    mov  al, SCAN_ICMP_TS
+    pop  rbx
+    ret
+.scan_icmp_nm:
+    cmp  al, 'i'
+    jne  .scan_arp
+    cmp  byte [rdi+1], 'c'
+    jne  .scan_arp
+    cmp  byte [rdi+2], 'm'
+    jne  .scan_arp
+    cmp  byte [rdi+3], 'p'
+    jne  .scan_arp
+    cmp  byte [rdi+4], 'n'
+    jne  .scan_arp
+    cmp  byte [rdi+5], 'm'
+    jne  .scan_arp
+    cmp  byte [rdi+6], 0
+    jne  .scan_arp
+    mov  al, SCAN_ICMP_NM
+    pop  rbx
+    ret
+.scan_arp:
+    cmp  al, 'a'
+    jne  .invalid
+    cmp  byte [rdi+1], 'r'
+    jne  .invalid
+    cmp  byte [rdi+2], 'p'
+    jne  .invalid
+    cmp  byte [rdi+3], 0
+    jne  .invalid
+    mov  al, SCAN_ARP
     pop  rbx
     ret
 .invalid:

@@ -25,7 +25,10 @@ usage_msg   db "Usage: netrox-asm <target_ip> [-p port|start-end|-]", 10
             db "       [--rate N] [--iface IFACE] [--scan MODE]", 10
             db "       [--bench] [--os] [--stabilize] [--about] [--wizard] [--callback]", 10
             db "  --no-color         disable color output", 10
-            db "Scan modes: syn ack fin null xmas window maimon udp ping sar kis phantom callback", 10
+            db "  --zombie <ip>      idle scan zombie host", 10
+            db "  --zombie-port <n>  zombie probe port", 10
+            db "  --ftp-proxy <ip:port>  ftp bounce proxy", 10
+            db "Scan modes: syn ack fin null xmas window maimon udp ping sar kis phantom callback connect idle iproto pingsweep list rpc sctpinit sctpecho ftp script aggressive seq icmp_ts icmp_nm arp", 10
 usage_len   equ $-usage_msg
 
 banner_line  db "+----------------------------------------------------------+", 10
@@ -904,6 +907,50 @@ echo_mode         resb 1
 random_host_count resd 1
 version_enabled   resb 1
 quiet_mode        resb 1
+aggressive_mode   resb 1
+
+; Additional scan engine state (nmap parity set)
+connect_fd        resq 1
+connect_timeo     resb 1
+
+zombie_ip         resd 1
+zombie_port       resw 1
+idle_ipid_before  resw 1
+idle_ipid_after   resw 1
+idle_ipid_delta   resw 1
+
+iproto_results    resb 256
+
+sweep_up_count    resd 1
+sweep_down_count  resd 1
+sweep_method      resb 1
+
+list_dns_enabled  resb 1
+dns_query_buf     resb 512
+
+rpc_result_buf    resb 4096
+rpc_xid           resd 1
+
+sctp_vtag         resd 1
+sctp_init_tag     resd 1
+sctp_tsn          resd 1
+
+ftp_proxy_ip      resd 1
+ftp_proxy_port    resw 1
+ftp_ctrl_fd       resq 1
+ftp_resp_buf      resb 512
+
+script_mode       resb 1
+script_port_idx   resd 1
+script_result_buf resb 1024
+
+icmp_ts_id        resw 1
+icmp_nm_id        resw 1
+
+arp_ifindex       resd 1
+arp_sock_fd       resq 1
+arp_mac_addr      resb 6
+arp_buf           resb 64
 
 ; ===========================================================================
 ; NetroX-ASM  |  Linux x86_64  |  Part 2 of 5: _start, arg parsing, init
@@ -1142,6 +1189,80 @@ _start:
     test al, al
     jz .usage
     mov [scan_mode], al
+    jmp .arg_next
+
+.check_zombie:
+    ; --zombie <ip>
+    cmp byte [rdi+1], '-'
+    jne .check_zombie_port
+    lea rsi, [rdi+2]
+    cmp dword [rsi], 'zomb'
+    jne .check_zombie_port
+    cmp word  [rsi+4], 'ie'
+    jne .check_zombie_port
+    cmp byte  [rsi+6], 0
+    jne .check_zombie_port
+    inc rcx
+    cmp rcx, r13
+    jae .usage
+    mov rdi, [rbx+rcx*8]
+    call parse_ip
+    test eax, eax
+    jz .usage
+    mov [zombie_ip], eax
+    jmp .arg_next
+
+.check_zombie_port:
+    ; --zombie-port <n>
+    cmp byte [rdi+1], '-'
+    jne .check_ftp_proxy
+    lea rsi, [rdi+2]
+    cmp dword [rsi], 'zomb'
+    jne .check_ftp_proxy
+    cmp dword [rsi+4], 'e-po'
+    jne .check_ftp_proxy
+    cmp word  [rsi+8], 'rt'
+    jne .check_ftp_proxy
+    cmp byte  [rsi+10], 0
+    jne .check_ftp_proxy
+    inc rcx
+    cmp rcx, r13
+    jae .usage
+    mov rdi, [rbx+rcx*8]
+    call parse_port
+    test ax, ax
+    jz .usage
+    mov [zombie_port], ax
+    jmp .arg_next
+
+.check_ftp_proxy:
+    ; --ftp-proxy <ip:port> or -b <ip:port>
+    cmp byte [rdi], '-'
+    jne .check_discovery
+    cmp byte [rdi+1], 'b'
+    je .ftp_proxy_arg
+    cmp byte [rdi+1], '-'
+    jne .check_discovery
+    lea rsi, [rdi+2]
+    cmp dword [rsi], 'ftp-'
+    jne .check_discovery
+    cmp dword [rsi+4], 'prox'
+    jne .check_discovery
+    cmp byte  [rsi+8], 'y'
+    jne .check_discovery
+    cmp byte  [rsi+9], 0
+    jne .check_discovery
+.ftp_proxy_arg:
+    inc rcx
+    cmp rcx, r13
+    jae .usage
+    mov rdi, [rbx+rcx*8]
+    call parse_ip_port
+    test eax, eax
+    jz .usage
+    mov [ftp_proxy_ip], eax
+    mov [ftp_proxy_port], dx
+    mov byte [scan_mode], SCAN_FTP_BOUNCE
     jmp .arg_next
 
 .check_discovery:
@@ -1825,9 +1946,15 @@ scan_loop_entry:
     jae .scan_done
     mov [resume_index], rbx
 
+    cmp byte [scan_mode], SCAN_SEQ
+    je .seq_index
     mov rdi, rbx
     mov rsi, r15
     call blackrock_permute
+    jmp .index_ready
+.seq_index:
+    mov eax, ebx
+.index_ready:
     cmp byte [cidr_mode], 0
     je .port_select
     call index_to_ip_port
@@ -2090,6 +2217,14 @@ scan_loop_entry:
     mov [bench_end_tsc], rax
 .skip_bench_end:
     call write_summary
+    cmp byte [script_mode], 0
+    je .skip_script
+    call script_post_scan
+.skip_script:
+    cmp byte [aggressive_mode], 0
+    je .skip_aggressive
+    call aggressive_post
+.skip_aggressive:
     cmp byte [wait_secs], 0
     je .skip_wait
     rdtsc

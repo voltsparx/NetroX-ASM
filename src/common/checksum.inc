@@ -185,3 +185,36 @@ icmp_checksum:
     not  ax
     xchg al, ah
     ret
+
+; ------------------------------------------------------------
+; crc32c_compute
+; Input:  rsi = data pointer, ecx = length
+; Output: eax = CRC32c (Castagnoli)
+; ------------------------------------------------------------
+crc32c_compute:
+    push rbx
+    mov eax, 0xFFFFFFFF
+.crc_loop:
+    test ecx, ecx
+    jz .crc_done
+    mov bl, [rsi]
+    xor al, bl
+    mov edx, 8
+.bit_loop:
+    test eax, 1
+    jz .shift
+    shr eax, 1
+    xor eax, 0x82F63B78
+    jmp .bit_next
+.shift:
+    shr eax, 1
+.bit_next:
+    dec edx
+    jnz .bit_loop
+    inc rsi
+    dec ecx
+    jmp .crc_loop
+.crc_done:
+    not eax
+    pop rbx
+    ret
