@@ -1,5 +1,5 @@
 ; ============================================================
-; NetroX-ASM Hybrid | Linux hot-path data (WIP extraction)
+; NetroX-ASC Hybrid | Linux hot-path data (WIP extraction)
 ; ============================================================
 %ifndef DATA_LINUX_ASM
 %define DATA_LINUX_ASM 1
@@ -206,11 +206,15 @@ cb_ntp_payload:
     times 47 db 0x00
 cb_ntp_len equ $ - cb_ntp_payload
 
+hdrincl         dd 1
+timeout_timeval dq 1, 0
+
 SECTION .bss
 ; Hot-path buffers and state referenced by scan_core
 packet_buf      resb 2048
 recv_buf        resb 4096
 epoll_out       resb 64
+epoll_event     resb 16
 
 sockaddr_dst    resb 16
 sockaddr_ll     resb 32
@@ -257,3 +261,5 @@ sockaddr_local  resb 16
 addrlen         resd 1
 
 %endif
+
+

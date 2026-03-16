@@ -1,61 +1,56 @@
 NASM      ?= nasm
-LD        ?= ld
-MINGW_LD  ?= x86_64-w64-mingw32-ld
+CXX       ?= g++
+MINGW_CXX ?= x86_64-w64-mingw32-g++
 
-BUILD_DIR     := build/linux
 BIN_DIR       := bin
-SRC_DIR       := src/linux
-WIN_BUILD_DIR := build/win
-WIN_SRC_DIR   := src/windows
+BUILD_DIR     := build
+LINUX_OBJ_DIR := $(BUILD_DIR)/linux
+WIN_OBJ_DIR   := $(BUILD_DIR)/win
 
-COMMON_DEPS := src/common/constants.inc \
-               src/common/scan.inc \
-               src/common/parse.inc \
-               src/common/checksum.inc \
-               src/common/packet.inc \
-               src/common/engine.inc
+CXXFLAGS := -std=c++17 -O2 -fno-exceptions -fno-rtti -I include
 
-LINUX_OBJS := $(BUILD_DIR)/main.o
-WIN_OBJS   := $(WIN_BUILD_DIR)/main.obj
+LINUX_ASM_SRCS := src/asm/linux/scan_core.asm src/asm/linux/network.asm src/asm/linux/data.asm
+WIN_ASM_SRCS   := src/asm/windows/scan_core.asm src/asm/windows/network.asm src/asm/windows/data.asm
 
-.PHONY: all linux windows clean
+CPP_SRCS := $(wildcard src/cpp/*.cpp)
+
+LINUX_ASM_OBJS := $(LINUX_ASM_SRCS:src/asm/linux/%.asm=$(LINUX_OBJ_DIR)/%.o)
+WIN_ASM_OBJS   := $(WIN_ASM_SRCS:src/asm/windows/%.asm=$(WIN_OBJ_DIR)/%.obj)
+LINUX_CPP_OBJS := $(CPP_SRCS:src/cpp/%.cpp=$(LINUX_OBJ_DIR)/cpp/%.o)
+WIN_CPP_OBJS   := $(CPP_SRCS:src/cpp/%.cpp=$(WIN_OBJ_DIR)/cpp/%.obj)
+
+.PHONY: all linux windows clean install uninstall update test-install
 
 all: linux windows
 
-# ---------------------------------------------------------------
-# Linux build:  single statically linked ELF64, no shared libs
-# ---------------------------------------------------------------
-linux: $(BUILD_DIR)/main.o
+linux: $(LINUX_ASM_OBJS) $(LINUX_CPP_OBJS)
 	@mkdir -p $(BIN_DIR)
-	$(LD) -o $(BIN_DIR)/netrox-asm $(BUILD_DIR)/main.o
-	@echo "[+] Linux build: $(BIN_DIR)/netrox-asm"
-	@ls -lh $(BIN_DIR)/netrox-asm
+	$(CXX) $(LINUX_ASM_OBJS) $(LINUX_CPP_OBJS) -o $(BIN_DIR)/netrox-asc
+	@echo "[+] Linux build: $(BIN_DIR)/netrox-asc"
 
-$(BUILD_DIR)/main.o: $(SRC_DIR)/main.asm $(COMMON_DEPS)
-	@mkdir -p $(BUILD_DIR)
-	$(NASM) -f elf64 -D LINUX $< -o $@
-
-# ---------------------------------------------------------------
-# Windows build: PE64, only ws2_32 + kernel32 imports
-# ---------------------------------------------------------------
-windows: $(WIN_BUILD_DIR)/main.obj
+windows: $(WIN_ASM_OBJS) $(WIN_CPP_OBJS)
 	@mkdir -p $(BIN_DIR)
-	$(MINGW_LD) -o $(BIN_DIR)/netrox-asm.exe $(WIN_BUILD_DIR)/main.obj \
-		-lws2_32 -lkernel32
-	@echo "[+] Windows build: $(BIN_DIR)/netrox-asm.exe"
-	@ls -lh $(BIN_DIR)/netrox-asm.exe
+	$(MINGW_CXX) $(WIN_ASM_OBJS) $(WIN_CPP_OBJS) -o $(BIN_DIR)/netrox-asc.exe -lws2_32 -lkernel32
+	@echo "[+] Windows build: $(BIN_DIR)/netrox-asc.exe"
 
-$(WIN_BUILD_DIR)/main.obj: $(WIN_SRC_DIR)/main.asm $(COMMON_DEPS)
-	@mkdir -p $(WIN_BUILD_DIR)
-	$(NASM) -f win64 -D WINDOWS $< -o $@
+$(LINUX_OBJ_DIR)/%.o: src/asm/linux/%.asm include/netrox_abi.h
+	@mkdir -p $(LINUX_OBJ_DIR)
+	$(NASM) -f elf64 -D LINUX -I src/asm/common/ $< -o $@
 
-# ---------------------------------------------------------------
-# Clean
-# ---------------------------------------------------------------
+$(WIN_OBJ_DIR)/%.obj: src/asm/windows/%.asm include/netrox_abi.h
+	@mkdir -p $(WIN_OBJ_DIR)
+	$(NASM) -f win64 -D WINDOWS -I src/asm/common/ $< -o $@
+
+$(LINUX_OBJ_DIR)/cpp/%.o: src/cpp/%.cpp include/netrox_abi.h
+	@mkdir -p $(LINUX_OBJ_DIR)/cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(WIN_OBJ_DIR)/cpp/%.obj: src/cpp/%.cpp include/netrox_abi.h
+	@mkdir -p $(WIN_OBJ_DIR)/cpp
+	$(MINGW_CXX) $(CXXFLAGS) -c $< -o $@
+
 clean:
-	rm -rf build $(BIN_DIR) netrox-asm netrox-asm.exe
-
-.PHONY: install uninstall update test-install
+	rm -rf build $(BIN_DIR)
 
 install:
 	@echo "[*] Running Linux installer..."

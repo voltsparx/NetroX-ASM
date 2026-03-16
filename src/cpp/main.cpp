@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     if (get_no_color()) ColorGuard::disable();
 
     if (get_help_mode()) { print_help(); return 0; }
-    if (get_version_mode()) { out_str("NetroX-ASM v1.0.0\n"); buf_flush(); return 0; }
+    if (get_version_mode()) { out_str("NetroX-ASC v1.0.0\n"); buf_flush(); return 0; }
     if (get_about_mode()) { print_about(); buf_flush(); return 0; }
     if (get_echo_mode()) { print_echo_config(cfg); buf_flush(); return 0; }
 
@@ -78,3 +78,4 @@ int main(int argc, char** argv) {
     buf_flush();
     return 0;
 }
+

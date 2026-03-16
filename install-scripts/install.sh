@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY_NAME="netrox-asm"
-INSTALL_BIN="/usr/local/bin/netrox-asm"
-INSTALL_DATA="/usr/share/netrox-asm"
-BUILD_OUTPUT="bin/netrox-asm"
+BINARY_NAME="NetroX-ASC"
+INSTALL_BIN="/usr/local/bin/NetroX-ASC"
+INSTALL_DATA="/usr/share/NetroX-ASC"
+BUILD_OUTPUT="bin/NetroX-ASC"
 VERSION_FILE="VERSION"
 TEST_DIR="test-tool"
-PROFILE_SCRIPT="/etc/profile.d/netrox-asm.sh"
+PROFILE_SCRIPT="/etc/profile.d/NetroX-ASC.sh"
 
 C_RESET="\033[0m"
 C_CYAN="\033[36m"
@@ -34,15 +34,15 @@ print_banner() {
   local ver
   ver="$(read_version)"
   echo -e "╔══════════════════════════════════════════╗"
-  echo -e "║   NETROX-ASM INSTALLER v${ver}            ║"
+  echo -e "║   NetroX-ASC INSTALLER v${ver}            ║"
   echo -e "║   Pure x86_64 NASM network diagnostic    ║"
   echo -e "╚══════════════════════════════════════════╝"
 }
 
 usage() {
   echo "Usage: sudo ./install-scripts/install.sh [install|uninstall|update|test]"
-  echo "  install   - build and install NetroX-ASM"
-  echo "  uninstall - remove NetroX-ASM from system"
+  echo "  install   - build and install NetroX-ASC"
+  echo "  uninstall - remove NetroX-ASC from system"
   echo "  update    - update existing installation"
   echo "  test      - build and run smoke tests"
 }
@@ -143,7 +143,7 @@ do_install() {
   add_to_path_profile
   verify_install
   echo "┌──────────────────────────────────────────┐"
-  echo "│  Installed NetroX-ASM v${ver}             │"
+  echo "│  Installed NetroX-ASC v${ver}             │"
   echo "│  Binary: ${INSTALL_BIN}"
   echo "└──────────────────────────────────────────┘"
 }
@@ -159,9 +159,9 @@ do_uninstall() {
   installed_ver="$(get_installed_version)"
   rm -f "$INSTALL_BIN"
   rm -rf "$INSTALL_DATA"
-  rm -f /usr/share/man/man1/netrox-asm.1 || true
+  rm -f /usr/share/man/man1/NetroX-ASC.1 || true
   remove_from_path_profile
-  echo "Uninstalled NetroX-ASM v${installed_ver}"
+  echo "Uninstalled NetroX-ASC v${installed_ver}"
 }
 
 do_update() {
@@ -196,7 +196,7 @@ do_update() {
   verify_install
   rm -f "${INSTALL_BIN}.bak"
   echo "┌──────────────────────────────────────────┐"
-  echo "│  Updated NetroX-ASM ${installed_ver} -> ${new_ver}"
+  echo "│  Updated NetroX-ASC ${installed_ver} -> ${new_ver}"
   echo "└──────────────────────────────────────────┘"
 }
 
@@ -253,3 +253,4 @@ case "${1:-}" in
     exit 1
     ;;
 esac
+

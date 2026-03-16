@@ -102,7 +102,7 @@ void print_banner() {
 void print_help() {
     const char* help =
         "+----------------------------------------------------------+\n"
-        "|            NetroX-ASM  --  Full Help                    |\n"
+        "|            NetroX-ASC  --  Full Help                    |\n"
         "+----------------------------------------------------------+\n"
         "TARGET SPECIFICATION:\n"
         "  <target>            IP, hostname, or CIDR (192.168.1.0/24)\n"
@@ -247,22 +247,22 @@ void print_help() {
         "  --engine <mode>     Engine: async / pipeline / batch\n"
         "  --no-color          Disable color output\n\n"
         "EXAMPLES:\n"
-        "  netrox-asm 192.168.1.1 -p 1-1000\n"
-        "  netrox-asm 192.168.1.0/24 --scan syn --top-ports 100\n"
-        "  netrox-asm 10.0.0.1 -A -T4 -oA result\n"
-        "  netrox-asm 10.0.0.1 --scan sar -p 1-65535\n"
-        "  netrox-asm 10.0.0.1 -sC --script=default\n"
-        "  netrox-asm 10.0.0.1 --scan idle --zombie 10.0.0.5\n"
-        "  netrox-asm 10.0.0.1 -D 1.2.3.4,ME,5.6.7.8 -T2\n"
-        "  netrox-asm -iL targets.txt --scan udp -F -oX out.xml\n"
-        "  netrox-asm 10.0.0.1 -6 -p 80,443\n";
+        "  NetroX-ASC 192.168.1.1 -p 1-1000\n"
+        "  NetroX-ASC 192.168.1.0/24 --scan syn --top-ports 100\n"
+        "  NetroX-ASC 10.0.0.1 -A -T4 -oA result\n"
+        "  NetroX-ASC 10.0.0.1 --scan sar -p 1-65535\n"
+        "  NetroX-ASC 10.0.0.1 -sC --script=default\n"
+        "  NetroX-ASC 10.0.0.1 --scan idle --zombie 10.0.0.5\n"
+        "  NetroX-ASC 10.0.0.1 -D 1.2.3.4,ME,5.6.7.8 -T2\n"
+        "  NetroX-ASC -iL targets.txt --scan udp -F -oX out.xml\n"
+        "  NetroX-ASC 10.0.0.1 -6 -p 80,443\n";
     out_str(help);
     buf_flush();
 }
 
 void print_about() {
     print_banner();
-    out_str("\nNetroX-ASM - x86_64 NASM network diagnostic engine\n");
+    out_str("\nNetroX-ASC - x86_64 NASM network diagnostic engine\n");
     out_str("github.com/voltsparx\n");
 }
 
@@ -278,7 +278,7 @@ void explain_print(const ScanConfig& cfg) {
         out_str("Measures RTT delta per port against baseline.\n");
         out_str("Reports: UNMONITORED | ACL | STATEFUL | DPI | AI-EDR | PROXY\n");
         out_str("Alias: --sar\n");
-        out_str("Example: netrox-asm <target> --scan sar -p 1-1000\n");
+        out_str("Example: NetroX-ASC <target> --scan sar -p 1-1000\n");
         break;
     case SCAN_KIS:
         out_str("KIS (Kinetic Impedance Scan)\n");
@@ -287,7 +287,7 @@ void explain_print(const ScanConfig& cfg) {
         out_str("Outputs a heat map of the target's port texture.\n");
         out_str("Thermal fuse triggers QUANTUM BRAKE on anomaly.\n");
         out_str("Alias: --kis\n");
-        out_str("Example: netrox-asm <target> --scan kis -p 1-65535\n");
+        out_str("Example: NetroX-ASC <target> --scan kis -p 1-65535\n");
         break;
     case SCAN_PHANTOM:
         out_str("PHANTOM (Phantom Passive-Open)\n");
@@ -295,21 +295,21 @@ void explain_print(const ScanConfig& cfg) {
         out_str("Detects ports that were already listening before the probe.\n");
         out_str("States: OBSERVED (passive) | CONFIRMED (active) | ABSENT\n");
         out_str("Alias: --phantom\n");
-        out_str("Example: netrox-asm <target> --scan phantom -p 80,443,8080\n");
+        out_str("Example: NetroX-ASC <target> --scan phantom -p 80,443,8080\n");
         break;
     case SCAN_CALLBACK:
         out_str("CALLBACK (Callback-Ping Monitor)\n");
         out_str("Sends DNS/NTP/ICMP bait, listens for inbound callbacks.\n");
         out_str("Classes: SILENT | STANDARD | RESPONSIVE | DELAYED\n");
         out_str("Alias: --callback\n");
-        out_str("Example: netrox-asm <target> --scan callback\n");
+        out_str("Example: NetroX-ASC <target> --scan callback\n");
         break;
     case SCAN_SEQ:
         out_str("SEQ (IPID Sequence Analysis)\n");
         out_str("Analyzes IP ID field increments across repeated probes.\n");
         out_str("Used to find viable zombie hosts for idle scanning.\n");
         out_str("Returns: RANDOM | CONSTANT | INCREMENTAL | BROKEN\n");
-        out_str("Example: netrox-asm <target> --scan seq\n");
+        out_str("Example: NetroX-ASC <target> --scan seq\n");
         break;
     default:
         out_str("No extended description for this scan mode.\n");
@@ -319,7 +319,7 @@ void explain_print(const ScanConfig& cfg) {
 }
 
 void print_echo_config(const ScanConfig& cfg) {
-    out_str("--- [ NETROX-ASM CONFIGURATION ] ---\n");
+    out_str("--- [ NetroX-ASC CONFIGURATION ] ---\n");
     out_str("Target     : "); out_uint(cfg.target_ip); out_str("\n");
     out_str("Scan       : "); out_str(scan_mode_name(cfg.scan_mode)); out_str("\n");
     out_str("Ports      : "); out_uint(cfg.start_port); out_str("-"); out_uint(cfg.end_port); out_str("\n");
@@ -367,3 +367,4 @@ void print_bench(const ScanConfig&, uint64_t pps, uint64_t elapsed_ms) {
     out_uint(elapsed_ms);
     out_str(" ms\n");
 }
+

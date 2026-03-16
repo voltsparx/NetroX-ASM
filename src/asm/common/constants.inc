@@ -286,7 +286,7 @@
 ; ============================================================
 ; Resume/pause
 ; ============================================================
-%define RESUME_FILE_NAME  "netrox-asm.resume", 0
+%define RESUME_FILE_NAME  "netrox-asc.resume", 0
 %define SYS_SIGNAL        48
 %define SIGINT            2
 
@@ -317,3 +317,4 @@
 %define SCTP_CHUNK_COOKIE_ECHO  10
 
 %endif
+

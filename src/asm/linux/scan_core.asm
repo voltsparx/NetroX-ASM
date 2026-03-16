@@ -1,5 +1,5 @@
 ; ============================================================
-; NetroX-ASM Hybrid | Linux hot-path scan core (WIP extraction)
+; NetroX-ASC Hybrid | Linux hot-path scan core (WIP extraction)
 ; ============================================================
 ; NOTE: This file is being split from src/linux/main.asm.
 ; The cold-path is now in C++; hot-path remains in ASM.
@@ -8,6 +8,67 @@
 %define SCAN_CORE_LINUX_ASM 1
 
 default rel
+; ScanConfig offsets (must match include/netrox_abi.h)
+%define CFG_TARGET_IP        0
+%define CFG_TARGET_MASK      4
+%define CFG_CIDR_MODE        8
+%define CFG_IPV6_MODE        9
+%define CFG_START_PORT       10
+%define CFG_END_PORT         12
+%define CFG_PORT_LIST        16
+%define CFG_PORT_LIST_COUNT  24
+%define CFG_TOP_PORTS_MODE   26
+%define CFG_TOP_PORTS_N      28
+%define CFG_SEQUENTIAL_MODE  30
+%define CFG_FAST_MODE        31
+%define CFG_SCAN_MODE        32
+%define CFG_ENGINE_MODE      33
+%define CFG_RATE_PPS         36
+%define CFG_SCAN_DELAY_US    40
+%define CFG_MAX_SCAN_DELAY_US 44
+%define CFG_MIN_RATE         48
+%define CFG_MIN_PARALLEL     52
+%define CFG_MAX_PARALLEL     54
+%define CFG_HOST_TIMEOUT     56
+%define CFG_RETRY_COUNT      64
+%define CFG_TIMING_TEMPLATE  65
+%define CFG_STAB_ENABLED     66
+%define CFG_JSON_MODE        67
+%define CFG_CSV_MODE         68
+%define CFG_QUIET_MODE       69
+%define CFG_REASON_MODE      70
+%define CFG_PACKET_TRACE     71
+%define CFG_VERBOSITY        72
+%define CFG_DEBUG_LEVEL      73
+%define CFG_BENCH_MODE       74
+%define CFG_OUTPUT_FILE      80
+%define CFG_OX_PATH          88
+%define CFG_OG_PATH          96
+%define CFG_OS_DETECT        104
+%define CFG_VERSION_ENABLED  105
+%define CFG_VERSION_INTENSITY 106
+%define CFG_BANNERS_MODE     107
+%define CFG_IFACE            108
+%define CFG_LOCAL_IP         124
+%define CFG_FRAG_MODE        128
+%define CFG_FRAG_MTU         130
+%define CFG_SPOOF_SRC_IP     132
+%define CFG_CUSTOM_TTL       136
+%define CFG_BADSUM_MODE      137
+%define CFG_DECOY_LIST       140
+%define CFG_DECOY_COUNT      172
+%define CFG_DECOY_ME_POS     173
+%define CFG_CUSTOM_DATA      174
+%define CFG_CUSTOM_DATA_LEN  238
+%define CFG_RANDOM_DATA_LEN  239
+%define CFG_SRC_PORT         240
+%define CFG_ZOMBIE_IP        244
+%define CFG_ZOMBIE_PORT      248
+%define CFG_FTP_PROXY_IP     252
+%define CFG_FTP_PROXY_PORT   256
+%define CFG_ON_PORT_RESULT   264
+%define CFG_ON_HOST_UP       272
+%define CFG_ON_SCAN_DONE     280
 
 SECTION .bss
 ; Hot-path only state (minimal subset for now)
@@ -60,39 +121,201 @@ SECTION .text
 
 global asm_scan_init
 global asm_scan_run
+global asm_get_local_ip
 global asm_get_tsc_hz
 global asm_scan_cleanup
-extern asm_get_local_ip
 extern setup_send_engine
 extern setup_sigint_handler
+extern asm_get_local_ip_internal
 
 ; ------------------------------------------------------------
 ; asm_scan_init
 ; ------------------------------------------------------------
 asm_scan_init:
-    ; TODO: wire full init from legacy main.asm
-    ; For now, just store cfg_ptr and return 0.
     mov [cfg_ptr], rdi
+    mov eax, [rdi + CFG_TARGET_IP]
+    mov [target_ip], eax
+    mov al, [rdi + CFG_SCAN_MODE]
+    mov [scan_mode], al
+    mov al, [rdi + CFG_CIDR_MODE]
+    mov [cidr_mode], al
+    mov ax, [rdi + CFG_START_PORT]
+    mov [start_port], ax
+    mov ax, [rdi + CFG_END_PORT]
+    mov [end_port], ax
+    mov eax, [rdi + CFG_RATE_PPS]
+    mov [rate_value], eax
+    mov al, [rdi + CFG_OS_DETECT]
+    mov [os_enabled], al
+    mov al, [rdi + CFG_RETRY_COUNT]
+    mov [retry_max], al
+    mov al, [rdi + CFG_STAB_ENABLED]
+    mov [stab_enabled], al
+    ; port list copy (if provided)
+    movzx ecx, word [rdi + CFG_PORT_LIST_COUNT]
+    test ecx, ecx
+    jz .no_port_list
+    mov rbx, [rdi + CFG_PORT_LIST]
+    test rbx, rbx
+    jz .no_port_list
+    mov [port_list_count], cx
+    mov byte [port_list_mode], 1
+    lea rsi, [port_list_buf]
+    xor edx, edx
+.pl_copy:
+    cmp dx, cx
+    jae .pl_done
+    mov ax, [rbx + rdx*2]
+    mov [rsi + rdx*2], ax
+    inc dx
+    jmp .pl_copy
+.pl_done:
+    jmp .port_list_done
+.no_port_list:
+    mov byte [port_list_mode], 0
+.port_list_done:
+    mov al, [rdi + CFG_TOP_PORTS_MODE]
+    mov [top_ports_mode], al
+    mov ax, [rdi + CFG_TOP_PORTS_N]
+    mov [top_ports_n], ax
+    mov eax, [rdi + CFG_LOCAL_IP]
+    mov [local_ip], eax
+    test eax, eax
+    jnz .have_local_ip
+    call asm_get_local_ip
+.have_local_ip:
+    mov eax, [local_ip]
+    mov [source_ip], eax
+
+    call blackrock_init
+    call cookie_init
+    call init_rate
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    mov [xorshift_state], rax
     xor eax, eax
     ret
-
 ; ------------------------------------------------------------
 ; asm_scan_run
 ; ------------------------------------------------------------
 asm_scan_run:
-    ; TODO: full scan loop extraction
-    ; TODO: implement full init; scan loop already extracted
+    ; Open raw socket
+    mov rax, SYS_SOCKET
+    mov rdi, AF_INET
+    mov rsi, SOCK_RAW
+    mov rdx, IPPROTO_TCP
+    syscall
+    test rax, rax
+    js .scan_fail
+    mov [raw_fd], rax
+
+    ; IP_HDRINCL = 1
+    mov rax, SYS_SETSOCKOPT
+    mov rdi, [raw_fd]
+    mov rsi, IPPROTO_IP
+    mov rdx, IP_HDRINCL
+    lea r10, [hdrincl]
+    mov r8, 4
+    syscall
+    test rax, rax
+    js .scan_fail
+
+    ; SO_RCVTIMEO = 1s
+    mov rax, SYS_SETSOCKOPT
+    mov rdi, [raw_fd]
+    mov rsi, SOL_SOCKET
+    mov rdx, SO_RCVTIMEO
+    lea r10, [timeout_timeval]
+    mov r8, 16
+    syscall
+
+    ; epoll setup
+    mov rax, SYS_EPOLL_CREATE1
+    xor rdi, rdi
+    syscall
+    test rax, rax
+    js .scan_fail
+    mov [epoll_fd], rax
+
+    mov dword [epoll_event], EPOLLIN | EPOLLET
+    mov rax, [raw_fd]
+    mov [epoll_event+8], rax
+    mov rax, SYS_EPOLL_CTL
+    mov rdi, [epoll_fd]
+    mov rsi, EPOLL_CTL_ADD
+    mov rdx, [raw_fd]
+    lea r10, [epoll_event]
+    syscall
+    test rax, rax
+    js .scan_fail
+
+    call setup_sigint_handler
+    call init_packet_template
+
+    mov word [sockaddr_dst], AF_INET
+    mov eax, [target_ip]
+    mov [sockaddr_dst+4], eax
+
+    call setup_send_engine
+    test eax, eax
+    jnz .scan_fail
+
+    movzx ecx, word [start_port]
+    movzx r15d, word [end_port]
+    mov r14d, r15d
+    sub r14d, ecx
+    inc r14d
+    mov r15d, r14d
+    mov r14d, ecx
+    xor ebx, ebx
+    xor r13, r13
+
+    cmp byte [port_list_mode], 0
+    je .check_top_ports_mode
+    lea r13, [port_list_buf]
+    movzx r15d, word [port_list_count]
+    xor r14d, r14d
+    jmp .scan_ready
+.check_top_ports_mode:
+    cmp byte [top_ports_mode], 0
+    je .scan_ready
+    mov r13, [top_ports_ptr]
+    movzx r15d, word [top_ports_n]
+    xor r14d, r14d
+.scan_ready:
+    cmp byte [cidr_mode], 0
+    je .scan_ready_done
+    mov r15, [total_ip_count]
+    test r15, r15
+    jz .scan_ready_done
+    ; total scans = total_ip_count * port_count
+    mov rax, r15
+    movzx rcx, word [end_port]
+    movzx rdx, word [start_port]
+    sub rcx, rdx
+    inc rcx
+    mul rcx
+    mov r15, rax
+    xor r14d, r14d
+.scan_ready_done:
+    call scan_loop_entry
     xor eax, eax
     ret
-
+.scan_fail:
+    mov eax, 1
+    ret
 ; ------------------------------------------------------------
 ; asm_get_local_ip
 ; ------------------------------------------------------------
 asm_get_local_ip:
-    ; TODO: implemented in network.asm
+    push rdi
+    call asm_get_local_ip_internal
+    pop rdi
+    mov eax, [local_ip]
+    mov [rdi + CFG_LOCAL_IP], eax
     xor eax, eax
     ret
-
 ; ------------------------------------------------------------
 ; asm_get_tsc_hz
 ; ------------------------------------------------------------
@@ -104,6 +327,27 @@ asm_get_tsc_hz:
 ; asm_scan_cleanup
 ; ------------------------------------------------------------
 asm_scan_cleanup:
+    mov rax, [send_fd]
+    test rax, rax
+    jz .skip_send
+    mov rdi, rax
+    mov rax, SYS_CLOSE
+    syscall
+.skip_send:
+    mov rax, [raw_fd]
+    test rax, rax
+    jz .skip_raw
+    mov rdi, rax
+    mov rax, SYS_CLOSE
+    syscall
+.skip_raw:
+    mov rax, [epoll_fd]
+    test rax, rax
+    jz .done
+    mov rdi, rax
+    mov rax, SYS_CLOSE
+    syscall
+.done:
     ret
 
 ; -------------------------------------------------------------------
@@ -779,3 +1023,10 @@ scan_loop_entry:
 %include "../common/engines/dispatch.inc"
 
 %endif
+
+
+
+
+
+
+

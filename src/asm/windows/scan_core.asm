@@ -1,5 +1,5 @@
 ; ============================================================
-; NetroX-ASM Hybrid | Windows hot-path scan core (WIP extraction)
+; NetroX-ASC Hybrid | Windows hot-path scan core (WIP extraction)
 ; ============================================================
 %ifndef SCAN_CORE_WINDOWS_ASM
 %define SCAN_CORE_WINDOWS_ASM 1
@@ -97,6 +97,7 @@ rate_max_cycles resq 1
 SECTION .text
 global asm_scan_init
 global asm_scan_run
+global asm_get_local_ip
 global asm_get_tsc_hz
 global asm_scan_cleanup
 
@@ -117,7 +118,29 @@ asm_scan_init:
     mov [retry_max], al
     mov al, [rdi + CFG_STAB_ENABLED]
     mov [stab_enabled], al
-    ; local IP: from cfg if provided, else discover
+    ; port list copy (if provided)
+    movzx ecx, word [rdi + CFG_PORT_LIST_COUNT]
+    test ecx, ecx
+    jz .no_port_list
+    mov rbx, [rdi + CFG_PORT_LIST]
+    test rbx, rbx
+    jz .no_port_list
+    mov [port_list_count], cx
+    mov byte [port_list_mode], 1
+    lea rsi, [port_list_buf]
+    xor edx, edx
+.pl_copy:
+    cmp dx, cx
+    jae .pl_done
+    mov ax, [rbx + rdx*2]
+    mov [rsi + rdx*2], ax
+    inc dx
+    jmp .pl_copy
+.pl_done:
+    jmp .port_list_done
+.no_port_list:
+    mov byte [port_list_mode], 0
+.port_list_done:    ; local IP: from cfg if provided, else discover
     mov eax, [rdi + CFG_LOCAL_IP]
     mov [local_ip], eax
     test eax, eax
@@ -217,11 +240,27 @@ asm_scan_run:
     mov eax, 1
     ret
 
+asm_get_local_ip:
+    push rdi
+    call asm_get_local_ip_internal
+    pop rdi
+    mov eax, [local_ip]
+    mov [rdi + CFG_LOCAL_IP], eax
+    xor eax, eax
+    ret
 asm_get_tsc_hz:
     mov rax, [tsc_hz]
     ret
 
 asm_scan_cleanup:
+    mov rax, [sock_fd]
+    cmp rax, INVALID_SOCKET
+    je .done
+    sub rsp, 40
+    mov rcx, rax
+    call closesocket
+    add rsp, 40
+.done:
     ret
 
 ; -------------------------------------------------------------------
@@ -706,8 +745,8 @@ scan_loop_entry:
 %include "../common/intelligence.inc"
 %include "../common/engines/dispatch.inc"
 
-extern asm_get_local_ip
 extern setup_sigint_handler
+extern asm_get_local_ip_internal
 extern WSAStartup
 extern socket
 extern setsockopt
@@ -716,3 +755,10 @@ extern sendto
 extern recvfrom
 
 %endif
+
+
+
+
+
+
+

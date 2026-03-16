@@ -1,4 +1,4 @@
-# NetroX-ASM
+# NetroX-ASC
 
 Phase 1 foundation: Sequential SYN probe in pure x86_64 assembly (Linux + Windows).
 
@@ -17,27 +17,27 @@ make windows
 ## Run
 
 ```sh
-sudo ./netrox-asm <target_ip> [-p port|start-end|-] [--rate N] [--iface IFACE] [--scan MODE] [--stabilize]
+sudo ./NetroX-ASC <target_ip> [-p port|start-end|-] [--rate N] [--iface IFACE] [--scan MODE] [--stabilize]
 ```
 
 ```sh
-netrox-asm.exe <target_ip> [-p port|start-end|-] [--rate N] [--scan MODE] [--stabilize]
+NetroX-ASC.exe <target_ip> [-p port|start-end|-] [--rate N] [--scan MODE] [--stabilize]
 ```
 
 ```sh
-sudo ./netrox-asm --prompt-mode
+sudo ./NetroX-ASC --prompt-mode
 ```
 
 ```sh
-netrox-asm.exe --prompt-mode
+NetroX-ASC.exe --prompt-mode
 ```
 
 ```sh
-./netrox-asm --about
+./NetroX-ASC --about
 ```
 
 ```sh
-netrox-asm.exe --about
+NetroX-ASC.exe --about
 ```
 
 ## Notes
@@ -58,3 +58,4 @@ netrox-asm.exe --about
 - ASCII banner prints at startup.
 - Linux `--iface <name>` enables an `AF_PACKET` send engine (NIC verified, link-layer send). Windows stays on WinSock raw sockets for now.
 - The send loop routes through an `intelligence` gate (currently rate control) for future adaptive logic.
+

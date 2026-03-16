@@ -1,5 +1,5 @@
 ; ============================================================
-; NetroX-ASM Hybrid | Linux network helpers (WIP extraction)
+; NetroX-ASC Hybrid | Linux network helpers (WIP extraction)
 ; ============================================================
 %ifndef NETWORK_LINUX_ASM
 %define NETWORK_LINUX_ASM 1
@@ -8,7 +8,7 @@ default rel
 
 SECTION .text
 global asm_host_probe
-global asm_get_local_ip
+global asm_get_local_ip_internal
 global copy_iface_name
 global setup_send_engine
 global verify_iface
@@ -151,7 +151,7 @@ verify_iface:
 ; -------------------------------------------------------------------
 ; get_local_ip
 ; -------------------------------------------------------------------
-asm_get_local_ip:
+asm_get_local_ip_internal:
     mov rax, SYS_SOCKET
     mov rdi, AF_INET
     mov rsi, SOCK_DGRAM
@@ -294,3 +294,5 @@ sigint_handler:
 %include "../common/intelligence.inc"
 
 %endif
+
+

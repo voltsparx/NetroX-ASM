@@ -29,7 +29,7 @@ static bool read_line(char* buf, size_t maxlen) {
 
 ScanConfig run_wizard() {
     ScanConfig cfg = {};
-    out_str("  NetroX-ASM Wizard\n");
+    out_str("  NetroX-ASC Wizard\n");
     out_str("  -----------------\n");
 
     char line[256] = {};
@@ -80,3 +80,4 @@ ScanConfig run_wizard() {
     }
     return cfg;
 }
+

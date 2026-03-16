@@ -7,7 +7,7 @@ extern void buf_flush();
 
 void json_header(const ScanConfig& cfg) {
     g_json_first = true;
-    out_str("{\"scanner\":\"netrox-asm\",\"target\":\"");
+    out_str("{\"scanner\":\"netrox-asc\",\"target\":\"");
     out_uint(cfg.target_ip);
     out_str("\",\"ports\":[");
 }
@@ -38,3 +38,4 @@ void json_footer(uint64_t elapsed_ms, int open_count, int filtered_count, int cl
     out_str("}}\n");
     buf_flush();
 }
+

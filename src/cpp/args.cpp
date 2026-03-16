@@ -301,8 +301,8 @@ static bool parse_hex_payload(const char* s, uint8_t* out, uint8_t& len) {
 
 void print_usage() {
     const char* msg =
-        "Usage: netrox-asm <target> [options]\n"
-        "Try: netrox-asm --help\n";
+        "Usage: netrox-asc <target> [options]\n"
+        "Try: netrox-asc --help\n";
 #ifdef _WIN32
     DWORD written = 0;
     WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), msg, (DWORD)std::strlen(msg), &written, nullptr);
@@ -472,3 +472,4 @@ bool parse_args(int argc, char** argv, ScanConfig& cfg) {
     }
     return true;
 }
+

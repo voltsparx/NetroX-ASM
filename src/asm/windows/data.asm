@@ -1,5 +1,5 @@
 ; ============================================================
-; NetroX-ASM Hybrid | Windows hot-path data (WIP extraction)
+; NetroX-ASC Hybrid | Windows hot-path data (WIP extraction)
 ; ============================================================
 %ifndef DATA_WINDOWS_ASM
 %define DATA_WINDOWS_ASM 1
@@ -258,3 +258,4 @@ stab_recv       resd 1
 stab_timeout    resd 1
 
 %endif
+

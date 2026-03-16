@@ -1,5 +1,5 @@
 ; ============================================================
-; NetroX-ASM Hybrid | Windows network helpers (WIP extraction)
+; NetroX-ASC Hybrid | Windows network helpers (WIP extraction)
 ; ============================================================
 %ifndef NETWORK_WINDOWS_ASM
 %define NETWORK_WINDOWS_ASM 1
@@ -12,11 +12,11 @@ default rel
 
 SECTION .text
 global asm_host_probe
-global asm_get_local_ip
+global asm_get_local_ip_internal
 global setup_sigint_handler
 global sigint_handler
 
-asm_get_local_ip:
+asm_get_local_ip_internal:
     push rbx
     sub rsp, 40
     mov ecx, AF_INET
@@ -161,3 +161,5 @@ extern closesocket
 extern local_ip
 
 %endif
+
+

@@ -6,14 +6,14 @@ param(
     [string]$Action
 )
 
-$BINARY_NAME  = "netrox-asm"
-$EXE_NAME     = "netrox-asm.exe"
-$INSTALL_DIR  = "C:\Program Files\NetroX-ASM"
-$INSTALL_BIN  = "$INSTALL_DIR\netrox-asm.exe"
+$BINARY_NAME  = "NetroX-ASC"
+$EXE_NAME     = "NetroX-ASC.exe"
+$INSTALL_DIR  = "C:\Program Files\NetroX-ASC"
+$INSTALL_BIN  = "$INSTALL_DIR\NetroX-ASC.exe"
 $VERSION_FILE = "VERSION"
-$BUILD_OUTPUT = "bin\netrox-asm.exe"
+$BUILD_OUTPUT = "bin\NetroX-ASC.exe"
 $TEST_DIR     = "test-tool"
-$TEST_BIN     = "test-tool\netrox-asm.exe"
+$TEST_BIN     = "test-tool\NetroX-ASC.exe"
 
 function Step($msg) { Write-Host "[*] $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "[+] $msg" -ForegroundColor Green }
@@ -32,7 +32,7 @@ function Read-Version {
 function Print-Banner {
     $ver = Read-Version
     Write-Host "╔══════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║   NETROX-ASM INSTALLER v$ver             " -ForegroundColor Cyan
+    Write-Host "║   NetroX-ASC INSTALLER v$ver             " -ForegroundColor Cyan
     Write-Host "║   Pure x86_64 NASM network diagnostic    ║" -ForegroundColor Cyan
     Write-Host "╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 }
@@ -155,7 +155,7 @@ function Do-Install {
     Add-ToPath
     Verify-Install
     Write-Host "┌──────────────────────────────────────────┐"
-    Write-Host "│  Installed NetroX-ASM v$ver             |"
+    Write-Host "│  Installed NetroX-ASC v$ver             |"
     Write-Host "│  Binary: $INSTALL_BIN                    
     Write-Host "└──────────────────────────────────────────┘"
 }
@@ -179,7 +179,7 @@ function Do-Uninstall {
         Warn "W003: Access denied. Run as Admin."
     }
     Remove-FromPath
-    Write-Host "Uninstalled NetroX-ASM v$installedVer"
+    Write-Host "Uninstalled NetroX-ASC v$installedVer"
 }
 
 function Do-Update {
@@ -216,7 +216,7 @@ function Do-Update {
     Verify-Install
     Remove-Item "$INSTALL_BIN.bak" -Force
     Write-Host "┌──────────────────────────────────────────┐"
-    Write-Host "│  Updated NetroX-ASM $installedVer -> $newVer"
+    Write-Host "│  Updated NetroX-ASC $installedVer -> $newVer"
     Write-Host "└──────────────────────────────────────────┘"
 }
 
@@ -267,3 +267,4 @@ switch ($Action) {
     "update"    { Do-Update }
     "test"      { Do-Test }
 }
+
