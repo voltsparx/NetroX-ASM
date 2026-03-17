@@ -318,3 +318,30 @@
 
 %endif
 
+
+; ============================================================
+; v2 scan modes
+; ============================================================
+%define SCAN_NETBIOS    29
+%define SCAN_MDNS       30
+%define SCAN_SNMP       31
+%define SCAN_SMB        32
+%define SCAN_SSL        33
+%define SCAN_HTTP       34
+%define SCAN_DNS        35
+%define SCAN_NTP        36
+%define SCAN_REDIS      37
+%define SCAN_MEMCACHED  38
+%define SCAN_DEEP       39
+%define SCAN_HEARTBLEED 40
+
+
+; ============================================================
+; PACKET_TX_RING (Linux)
+; ============================================================
+%define SOL_PACKET        263
+%define PACKET_TX_RING    13
+%define ETH_P_ALL         0x0003
+
+
+

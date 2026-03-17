@@ -39,3 +39,5 @@ void json_footer(uint64_t elapsed_ms, int open_count, int filtered_count, int cl
     buf_flush();
 }
 
+
+

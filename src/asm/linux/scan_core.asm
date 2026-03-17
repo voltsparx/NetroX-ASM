@@ -8,7 +8,12 @@
 %define SCAN_CORE_LINUX_ASM 1
 
 default rel
-; ScanConfig offsets (must match include/netrox_abi.h)
+%define RESULT_RING_SIZE 4096
+%define SIZEOF_PORTRESULT 704
+%define RESULT_RING_BYTES (RESULT_RING_SIZE*SIZEOF_PORTRESULT)
+%define RING_HEAD_OFF RESULT_RING_BYTES
+%define RING_TAIL_OFF (RESULT_RING_BYTES+64)
+; ScanConfig offsets (must match include/netrox-asc_abh.h)
 %define CFG_TARGET_IP        0
 %define CFG_TARGET_MASK      4
 %define CFG_CIDR_MODE        8
@@ -69,6 +74,8 @@ default rel
 %define CFG_ON_PORT_RESULT   264
 %define CFG_ON_HOST_UP       272
 %define CFG_ON_SCAN_DONE     280
+%define CFG_INDEX_START      296
+%define CFG_INDEX_END        304
 
 SECTION .bss
 ; Hot-path only state (minimal subset for now)
@@ -96,6 +103,13 @@ blackrock_key_3 resq 1
 blackrock_key_4 resq 1
 blackrock_key_5 resq 1
 scan_done_flag  resb 1
+tx_only_mode   resb 1
+result_ring_ptr resq 1
+asm_result_ring_ptr resq 1
+error_ring_ptr  resq 1
+asm_error_ring_ptr  resq 1
+drop_counter   resd 1
+temp_result    resb SIZEOF_PORTRESULT
 
 ; CIDR index state (temporary while refactoring)
 ip_ranges         resb 128 * 8
@@ -124,6 +138,10 @@ global asm_scan_run
 global asm_get_local_ip
 global asm_get_tsc_hz
 global asm_scan_cleanup
+global asm_drain_results
+global asm_get_scan_index
+global asm_result_ring_ptr
+global asm_error_ring_ptr
 extern setup_send_engine
 extern setup_sigint_handler
 extern asm_get_local_ip_internal
@@ -133,6 +151,10 @@ extern asm_get_local_ip_internal
 ; ------------------------------------------------------------
 asm_scan_init:
     mov [cfg_ptr], rdi
+    mov rax, [asm_result_ring_ptr]
+    mov [result_ring_ptr], rax
+    mov rax, [asm_error_ring_ptr]
+    mov [error_ring_ptr], rax
     mov eax, [rdi + CFG_TARGET_IP]
     mov [target_ip], eax
     mov al, [rdi + CFG_SCAN_MODE]
@@ -299,6 +321,18 @@ asm_scan_run:
     mov r15, rax
     xor r14d, r14d
 .scan_ready_done:
+    ; apply index range (shard support)
+    mov rax, [cfg_ptr]
+    mov rcx, [rax + CFG_INDEX_START]
+    mov rdx, [rax + CFG_INDEX_END]
+    test rcx, rcx
+    jz .idx_start_done
+    mov rbx, rcx
+.idx_start_done:
+    test rdx, rdx
+    jz .idx_end_done
+    mov r15, rdx
+.idx_end_done:
     call scan_loop_entry
     xor eax, eax
     ret
@@ -348,6 +382,39 @@ asm_scan_cleanup:
     mov rax, SYS_CLOSE
     syscall
 .done:
+    ret
+
+; ------------------------------------------------------------
+; asm_get_scan_index
+; ------------------------------------------------------------
+asm_get_scan_index:
+    mov rax, [resume_index]
+    ret
+
+; ------------------------------------------------------------
+; asm_drain_results (stub)
+; ------------------------------------------------------------
+asm_drain_results:
+    push r12
+    push r13
+    mov r12, rdi
+    xor r13d, r13d
+.drain_loop:
+    lea rdi, [temp_result]
+    call ring_pop_asm
+    test rax, rax
+    jz .drain_done
+    mov rax, [r12 + CFG_ON_PORT_RESULT]
+    test rax, rax
+    jz .drain_loop
+    lea rdi, [temp_result]
+    call rax
+    inc r13d
+    jmp .drain_loop
+.drain_done:
+    mov eax, r13d
+    pop r13
+    pop r12
     ret
 
 ; -------------------------------------------------------------------
@@ -834,6 +901,8 @@ scan_loop_entry:
     je .after_sent
     inc dword [stab_sent]
 .after_sent:
+    cmp byte [tx_only_mode], 1
+    je .tx_skip_recv
 
     mov r11d, 8
 .epoll_loop:
@@ -1009,6 +1078,7 @@ scan_loop_entry:
     jmp .scan_loop
 
 .scan_done:
+    mov byte [scan_done_flag], 1
     ret
 
 ; ------------------------------------------------------------
@@ -1026,6 +1096,105 @@ scan_loop_entry:
 
 
 
+
+
+
+
+
+; -------------------------------------------------------------------
+; tx_loop_entry (stub: uses existing scan loop)
+; -------------------------------------------------------------------
+tx_loop_entry:
+    mov byte [tx_only_mode], 1
+    call scan_loop_entry
+    mov byte [tx_only_mode], 0
+    mov byte [scan_done_flag], 1
+    ret
+
+; -------------------------------------------------------------------
+; rx_loop_entry (basic receive loop)
+; -------------------------------------------------------------------
+rx_loop_entry:
+.rx_loop:
+    cmp byte [scan_done_flag], 1
+    je .done
+    call recv_and_classify
+    jmp .rx_loop
+.done:
+    ret
+
+
+
+
+
+
+
+; -------------------------------------------------------------------
+; ring_push_asm
+; rdi = PortResult*
+; -------------------------------------------------------------------
+ring_push_asm:
+    push rbx
+    push rsi
+    push rdi
+    mov rbx, [result_ring_ptr]
+    test rbx, rbx
+    jz .full
+    mov eax, [rbx + RING_HEAD_OFF]
+    mov ecx, eax
+    inc ecx
+    and ecx, (RESULT_RING_SIZE - 1)
+    cmp ecx, [rbx + RING_TAIL_OFF]
+    je .full
+    imul rax, rax, SIZEOF_PORTRESULT
+    lea rsi, [rbx + rax]
+    pop rdi
+    mov rcx, SIZEOF_PORTRESULT/8
+    rep movsq
+    __asm$release_head:
+    mov eax, edx
+    lock xchg [rbx + RING_HEAD_OFF], eax
+    pop rsi
+    pop rbx
+    xor eax, eax
+    ret
+.full:
+    pop rdi
+    pop rsi
+    pop rbx
+    mov eax, 1
+    ret
+
+; -------------------------------------------------------------------
+; ring_pop_asm
+; rdi = PortResult*
+; -------------------------------------------------------------------
+ring_pop_asm:
+    push rbx
+    push rsi
+    mov rbx, [result_ring_ptr]
+    test rbx, rbx
+    jz .empty
+    mov eax, [rbx + RING_TAIL_OFF]
+    cmp eax, [rbx + RING_HEAD_OFF]
+    je .empty
+    imul rax, rax, SIZEOF_PORTRESULT
+    lea rsi, [rbx + rax]
+    mov rcx, SIZEOF_PORTRESULT/8
+    rep movsq
+    mov eax, [rbx + RING_TAIL_OFF]
+    inc eax
+    and eax, (RESULT_RING_SIZE - 1)
+    lock xchg [rbx + RING_TAIL_OFF], eax
+    pop rsi
+    pop rbx
+    mov eax, 1
+    ret
+.empty:
+    pop rsi
+    pop rbx
+    xor eax, eax
+    ret
 
 
 

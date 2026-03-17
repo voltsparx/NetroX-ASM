@@ -170,9 +170,10 @@ script_probe_port:
 SECTION .rodata
 http_probe db "HEAD / HTTP/1.0", 13, 10, 13, 10
 http_probe_len equ $-http_probe
-smtp_probe db "EHLO netrox", 13, 10
+smtp_probe db "EHLO netrox-asc", 13, 10
 smtp_probe_len equ $-smtp_probe
 ftp_probe db "FEAT", 13, 10
 ftp_probe_len equ $-ftp_probe
 
 %endif
+

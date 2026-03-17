@@ -18,7 +18,16 @@ struct PortResult {
     uint32_t rtt_ns;    // RTT in nanoseconds (0 if unknown)
     char     service[32];
     char     version[64];
-    char     reason[16];  // "syn-ack", "rst", "no-resp", "icmp-unreach"
+        char     reason[16];  // "syn-ack", "rst", "no-resp", "icmp-unreach"
+
+    uint8_t  tls_version;       // 0=none,1=SSLv3,2=TLS10,3=TLS11,4=TLS12,5=TLS13
+    uint8_t  heartbleed_vuln;   // 1=vulnerable
+    char     banner[256];       // raw banner text
+    char     cert_cn[128];      // TLS cert CN
+    char     netbios_name[32];  // NetBIOS hostname
+    char     netbios_wg[32];    // NetBIOS workgroup
+    uint8_t  smb_v1;            // 1=SMBv1 detected
+    char     finding[128];      // deep probe finding
 };
 
 // ------------------------------------------------------------------
@@ -161,7 +170,72 @@ struct ScanConfig {
     // offset 272
     void  (*on_host_up)(uint32_t ip);               // called when host responds
     // offset 280
-    void  (*on_scan_done)(void);                    // called at scan end
+        void  (*on_scan_done)(void);                    // called at scan end
+
+    // === TX/RX Threading (masscan model) ===
+    // offset 288
+    uint8_t    tx_rx_split;       // 1=separate TX/RX threads, 0=epoll model
+    // offset 289
+    uint8_t    use_tx_ring;       // 1=PACKET_TX_RING, 0=raw sendto
+    // offset 290
+    uint16_t   shard_id;          // 0=disabled, 1..N = shard number
+    // offset 292
+    uint16_t   shard_total;       // total number of shards (must be >0)
+    // offset 296
+    uint64_t   index_start;       // scan index range start (shard support)
+    // offset 304
+    uint64_t   index_end;         // scan index range end
+
+    // === Extended output ===
+    // offset 312
+    uint8_t    output_format;     // 0=text,1=json,2=csv,3=xml,4=binary,5=list
+    // offset 313
+    uint8_t    output_append;     // 1=O_APPEND on output files
+
+    // === Deep scan ===
+    // offset 314
+    uint8_t    deep_level;        // 0=off,1=banners,2=fingerprint,3=full
+    // offset 315
+    uint8_t    heartbleed_check;  // 1=test SSL ports for Heartbleed
+    // offset 316
+    uint8_t    readscan_mode;     // 1=read binary scan file, not scan
+    // offset 317
+    uint8_t    _pad0[7];          // align to 8 bytes for pointer
+    // offset 324
+    char*      readscan_path;     // path to binary scan file
+
+    // === Knowledge base (opaque C++ pointer) ===
+    // offset 332
+    void*      host_kb;           // KnowledgeBase* cast to void*
+
+    // === New callback ===
+    // offset 340
+    void  (*on_scan_progress)(uint64_t current, uint64_t total); // progress
+
+
+    // === v3 additions ===
+    // offset 348
+    uint8_t    cooldown_secs;    // RX cooldown after TX done (default 8)
+    // offset 349
+    uint8_t    silent_mode;      // 1 = suppress all non-result output
+    // offset 350
+    uint8_t    offline_mode;     // 1 = build packets but do not send
+    // offset 351
+    uint8_t    probes_per_target; // probes per target (1-5)
+    // offset 352
+    uint32_t   max_results;      // stop after N results (0=unlimited)
+    // offset 356
+    uint32_t   max_runtime_secs; // stop after N seconds (0=unlimited)
+    // offset 360
+    uint64_t   scan_seed;        // 0=random, else fixed seed
+    // offset 368
+    uint64_t   bandwidth_bps;    // rate in bits/sec (0=use rate_pps)
+    // offset 376
+    char*      stats_file;       // stats output file (NULL=stderr)
+    // offset 384
+    uint8_t    iL_from_stdin;    // 1 = read targets from stdin
+    // offset 385
+    uint8_t    _pad1[7];
 };
 
 #ifdef __cplusplus
@@ -189,8 +263,15 @@ uint64_t asm_get_tsc_hz(void);
 // Clean shutdown: close sockets, flush buffers.
 void asm_scan_cleanup(void);
 
+int      asm_start_tx_thread(ScanConfig* cfg);
+int      asm_start_rx_thread(ScanConfig* cfg);
+uint64_t asm_get_scan_index(void);
+int      asm_drain_results(ScanConfig* cfg);
+int      asm_setup_tx_ring(ScanConfig* cfg);
+
 #ifdef __cplusplus
 }
 #endif
 
-// sizeof(ScanConfig) = 288 bytes
+// sizeof(ScanConfig) = 392 bytes
+

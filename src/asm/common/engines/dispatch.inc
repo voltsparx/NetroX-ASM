@@ -49,4 +49,29 @@ build_packet:
     je   build_udp_packet
     jmp  build_syn_packet
 
+%include "engines/netbios_engine.inc"
+%include "engines/mdns_engine.inc"
+%include "engines/snmp_engine.inc"
+%include "engines/smb_engine.inc"
+%include "engines/ssl_engine.inc"
+%include "engines/http_engine.inc"
+%include "engines/dns_engine.inc"
+%include "engines/ntp_engine.inc"
+%include "engines/kvdb_engine.inc"
+%include "engines/memcached_engine.inc"
+%include "engines/deep_engine.inc"
+
+%include "engines/quic_engine.inc"
+%include "engines/ics_engine.inc"
+%include "engines/db_engine.inc"
+%include "engines/upnp_engine.inc"
+%include "engines/telnet_engine.inc"
+%include "engines/vnc_engine.inc"
+%include "engines/rdp_engine.inc"
+%include "engines/mqtt_engine.inc"
+%include "engines/amqp_engine.inc"
+%include "engines/kafka_engine.inc"
+
 %endif
+
+

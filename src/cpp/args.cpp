@@ -16,6 +16,11 @@ static bool g_wizard_mode = false;
 static bool g_no_color = false;
 static bool g_iflist_mode = false;
 static bool g_version_mode = false;
+static const char* g_filter_expr = nullptr;
+static bool g_silent_mode = false;
+static bool g_offline_mode = false;
+static const char* g_stats_file = nullptr;
+static bool g_iL_from_stdin = false;
 static bool g_skip_discovery = false;
 static bool g_ping_only_mode = false;
 static uint8_t g_disc_icmp_type = 8;
@@ -37,6 +42,11 @@ bool get_wizard_mode() { return g_wizard_mode; }
 bool get_no_color() { return g_no_color; }
 bool get_iflist_mode() { return g_iflist_mode; }
 bool get_version_mode() { return g_version_mode; }
+const char* get_filter_expr() { return g_filter_expr; }
+bool get_silent_mode() { return g_silent_mode; }
+bool get_offline_mode() { return g_offline_mode; }
+const char* get_stats_file() { return g_stats_file; }
+bool get_iL_from_stdin() { return g_iL_from_stdin; }
 bool get_skip_discovery() { return g_skip_discovery; }
 bool get_ping_only_mode() { return g_ping_only_mode; }
 uint8_t get_disc_icmp_type() { return g_disc_icmp_type; }
@@ -252,8 +262,31 @@ uint8_t parse_scan_mode(const char* s) {
     if (std::strcmp(buf, "seq") == 0) return SCAN_SEQ;
     if (std::strcmp(buf, "icmp-ts") == 0 || std::strcmp(buf, "icmpts") == 0 || std::strcmp(buf, "icmp_ts") == 0) return SCAN_ICMP_TS;
     if (std::strcmp(buf, "icmp-nm") == 0 || std::strcmp(buf, "icmpnm") == 0 || std::strcmp(buf, "icmp_nm") == 0) return SCAN_ICMP_NM;
-    if (std::strcmp(buf, "arp") == 0) return SCAN_ARP;
+        if (std::strcmp(buf, "arp") == 0) return SCAN_ARP;
+    if (std::strcmp(buf, "netbios") == 0) return SCAN_NETBIOS;
+    if (std::strcmp(buf, "mdns") == 0) return SCAN_MDNS;
+    if (std::strcmp(buf, "snmp") == 0) return SCAN_SNMP;
+    if (std::strcmp(buf, "smb") == 0) return SCAN_SMB;
+    if (std::strcmp(buf, "ssl") == 0) return SCAN_SSL;
+    if (std::strcmp(buf, "http") == 0) return SCAN_HTTP;
+    if (std::strcmp(buf, "dns") == 0) return SCAN_DNS;
+    if (std::strcmp(buf, "ntp") == 0) return SCAN_NTP;
+    if (std::strcmp(buf, "redis") == 0) return SCAN_REDIS;
+    if (std::strcmp(buf, "memcached") == 0) return SCAN_MEMCACHED;
+    if (std::strcmp(buf, "deep") == 0) return SCAN_DEEP;
+    if (std::strcmp(buf, "heartbleed") == 0) return SCAN_HEARTBLEED;
     return 0;
+}
+
+uint64_t parse_bandwidth(const char* s) {
+    if (!s) return 0;
+    char* end = nullptr;
+    uint64_t n = std::strtoull(s, &end, 10);
+    if (!end) return n;
+    if (*end == "G"[0]) n *= 1000000000ULL;
+    else if (*end == "M"[0]) n *= 1000000ULL;
+    else if (*end == "K"[0]) n *= 1000ULL;
+    return n;
 }
 
 uint64_t parse_timespec(const char* s) {
@@ -336,7 +369,19 @@ bool parse_args(int argc, char** argv, ScanConfig& cfg) {
         else if (arg == "-sR") cfg.scan_mode = SCAN_RPC;
         else if (arg == "-sY") cfg.scan_mode = SCAN_SCTP_INIT;
         else if (arg == "-sZ") cfg.scan_mode = SCAN_SCTP_ECHO;
-        else if (arg == "-sC") { cfg.scan_mode = SCAN_SCRIPT; }
+                else if (arg == "-sC") { cfg.scan_mode = SCAN_SCRIPT; }
+        else if (arg == "-sNB") cfg.scan_mode = SCAN_NETBIOS;
+        else if (arg == "-sMD") cfg.scan_mode = SCAN_MDNS;
+        else if (arg == "-sSN") cfg.scan_mode = SCAN_SNMP;
+        else if (arg == "-sSB") cfg.scan_mode = SCAN_SMB;
+        else if (arg == "-sSL") cfg.scan_mode = SCAN_SSL;
+        else if (arg == "-sHT") cfg.scan_mode = SCAN_HTTP;
+        else if (arg == "-sDN") cfg.scan_mode = SCAN_DNS;
+        else if (arg == "-sNT") cfg.scan_mode = SCAN_NTP;
+        else if (arg == "-sRD") cfg.scan_mode = SCAN_REDIS;
+        else if (arg == "-sMC") cfg.scan_mode = SCAN_MEMCACHED;
+        else if (arg == "-sDP") cfg.scan_mode = SCAN_DEEP;
+        else if (arg == "-sHB") { cfg.scan_mode = SCAN_HEARTBLEED; cfg.heartbleed_check = 1; }
         else if (arg == "-sV") { cfg.version_enabled = 1; cfg.banners_mode = 1; }
         else if (arg == "-sn") { cfg.scan_mode = SCAN_PINGSWEEP; g_ping_only_mode = true; }
         else if (arg == "-PE") { cfg.scan_mode = SCAN_PING; g_disc_icmp_type = 8; }
@@ -359,14 +404,49 @@ bool parse_args(int argc, char** argv, ScanConfig& cfg) {
         else if (arg == "-sKI") cfg.scan_mode = SCAN_KIS;
         else if (arg == "-sPH") cfg.scan_mode = SCAN_PHANTOM;
         else if (arg == "-sCB") cfg.scan_mode = SCAN_CALLBACK;
-        else if (arg == "-sSQ") cfg.scan_mode = SCAN_SEQ;
+        else if (arg == "-sSEQ") cfg.scan_mode = SCAN_SEQ;
         else if (arg == "--sar") cfg.scan_mode = SCAN_SAR;
         else if (arg == "--kis") cfg.scan_mode = SCAN_KIS;
         else if (arg == "--phantom") cfg.scan_mode = SCAN_PHANTOM;
         else if (arg == "--callback") cfg.scan_mode = SCAN_CALLBACK;
+        else if (arg == "-sSEQ") cfg.scan_mode = SCAN_SEQ;
+        else if (arg == "-sQU") cfg.scan_mode = SCAN_QUIC;
+        else if (arg == "-sMQ") cfg.scan_mode = SCAN_MQTT;
+        else if (arg == "-sMOD") cfg.scan_mode = SCAN_MODBUS;
+        else if (arg == "-sS7") cfg.scan_mode = SCAN_S7;
+        else if (arg == "-sBN") cfg.scan_mode = SCAN_BACNET;
+        else if (arg == "-sUP") cfg.scan_mode = SCAN_UPNP;
+        else if (arg == "-sTL") cfg.scan_mode = SCAN_TELNET;
+        else if (arg == "-sVN") cfg.scan_mode = SCAN_VNC;
+        else if (arg == "-sRP") cfg.scan_mode = SCAN_RDP;
+        else if (arg == "-sAQ") cfg.scan_mode = SCAN_AMQP;
+        else if (arg == "-sSQ") cfg.scan_mode = SCAN_MSSQL;
+        else if (arg == "-sMY") cfg.scan_mode = SCAN_MYSQL;
+        else if (arg == "-sPG") cfg.scan_mode = SCAN_POSTGRES;
+        else if (arg == "-sMG") cfg.scan_mode = SCAN_MONGO;
+        else if (arg == "-sEL") cfg.scan_mode = SCAN_ELASTIC;
+        else if (arg == "-sLD") cfg.scan_mode = SCAN_LDAP;
+        else if (arg == "-sKE") cfg.scan_mode = SCAN_KERBEROS;
+        else if (arg == "-sWR") cfg.scan_mode = SCAN_WINRM;
+        else if (arg == "-sKF") cfg.scan_mode = SCAN_KAFKA;
+        else if (arg == "-sDNP") cfg.scan_mode = SCAN_DNP3;
 
         else if (arg == "--help" || arg == "-h") g_help_mode = true;
-        else if (arg == "--scan") cfg.scan_mode = parse_scan_mode(next(i));
+                else if (arg == "--scan") cfg.scan_mode = parse_scan_mode(next(i));
+        else if (arg == "--tx-rx-split") cfg.tx_rx_split = 1;
+        else if (arg == "--send-ring") cfg.use_tx_ring = 1;
+        else if (arg == "--heartbleed") cfg.heartbleed_check = 1;
+        else if (arg == "--deep") { cfg.deep_level = (uint8_t)std::atoi(next(i)); if (cfg.deep_level == 0) cfg.deep_level = 1; }
+        else if (arg == "--deep1") cfg.deep_level = 1;
+        else if (arg == "--deep2") cfg.deep_level = 2;
+        else if (arg == "--deep3") cfg.deep_level = 3;
+        else if (arg == "--readscan") { cfg.readscan_mode = 1; cfg.readscan_path = (char*)next(i); }
+        else if (arg == "--output-format") { const char* f = next(i); if (std::strcmp(f, "text") == 0) cfg.output_format = 0; else if (std::strcmp(f, "json") == 0) cfg.output_format = 1; else if (std::strcmp(f, "csv") == 0) cfg.output_format = 2; else if (std::strcmp(f, "xml") == 0) cfg.output_format = 3; else if (std::strcmp(f, "binary") == 0) cfg.output_format = 4; else if (std::strcmp(f, "list") == 0) cfg.output_format = 5; }
+        else if (arg == "-oJ") { cfg.output_format = 1; cfg.output_file = (char*)next(i); }
+        else if (arg == "-oL") { cfg.output_format = 5; cfg.output_file = (char*)next(i); }
+        else if (arg == "-oB") { cfg.output_format = 4; cfg.output_file = (char*)next(i); }
+        else if (arg == "--max-rate") cfg.rate_pps = (uint32_t)std::atoi(next(i));
+        else if (arg == "--shard") { const char* s = next(i); const char* slash = std::strchr(s, '/'); if (!slash) { print_usage(); std::exit(1); } cfg.shard_id = (uint16_t)std::atoi(s); cfg.shard_total = (uint16_t)std::atoi(slash + 1); if (cfg.shard_id < 1 || cfg.shard_id > cfg.shard_total) { print_usage(); std::exit(1); } }
         else if (arg.rfind("--scan=", 0) == 0) cfg.scan_mode = parse_scan_mode(arg.substr(7).data());
         else if (arg == "--rate" || arg == "--max-rate") cfg.rate_pps = (uint32_t)std::strtoul(next(i), nullptr, 10);
         else if (arg == "--min-rate") cfg.min_rate = (uint32_t)std::strtoul(next(i), nullptr, 10);
@@ -390,6 +470,16 @@ bool parse_args(int argc, char** argv, ScanConfig& cfg) {
         else if (arg == "--reason") cfg.reason_mode = 1;
         else if (arg == "--packet-trace") cfg.packet_trace = 1;
         else if (arg == "--bench") cfg.bench_mode = 1;
+        else if (arg == "--filter") g_filter_expr = next(i);
+        else if (arg == "--silent") { g_silent_mode = true; cfg.silent_mode = 1; }
+        else if (arg == "--offline") { g_offline_mode = true; cfg.offline_mode = 1; }
+        else if (arg == "--cooldown") cfg.cooldown_secs = (uint8_t)std::strtoul(next(i), nullptr, 10);
+        else if (arg == "--bandwidth" || arg == "-B") cfg.bandwidth_bps = parse_bandwidth(next(i));
+        else if (arg == "--max-results" || arg == "-N") cfg.max_results = (uint32_t)std::strtoul(next(i), nullptr, 10);
+        else if (arg == "--max-runtime" || arg == "-t") cfg.max_runtime_secs = (uint32_t)std::strtoul(next(i), nullptr, 10);
+        else if (arg == "--seed") cfg.scan_seed = std::strtoull(next(i), nullptr, 0);
+        else if (arg == "--probes") { uint32_t v = (uint32_t)std::strtoul(next(i), nullptr, 10); if (v == 0) v = 1; if (v > 5) v = 5; cfg.probes_per_target = (uint8_t)v; }
+        else if (arg == "--stats-file") cfg.stats_file = (char*)next(i);
         else if (arg == "--banners") { cfg.version_enabled = 1; cfg.banners_mode = 1; }
         else if (arg == "-p") { if (!parse_port_spec(next(i), cfg)) return false; }
         else if (arg == "--top-ports") { cfg.top_ports_mode = 1; cfg.top_ports_n = (uint16_t)std::strtoul(next(i), nullptr, 10); }
@@ -409,6 +499,7 @@ bool parse_args(int argc, char** argv, ScanConfig& cfg) {
             apply_timing_template(cfg);
         }
         else if (arg == "-iL") g_iL_path = next(i);
+        else if (arg == "-") { g_iL_from_stdin = true; cfg.iL_from_stdin = 1; }
         else if (arg == "-iR") g_random_count = (uint32_t)std::strtoul(next(i), nullptr, 10);
         else if (arg == "-oN") cfg.output_file = const_cast<char*>(next(i));
         else if (arg == "-oX") cfg.oX_path = const_cast<char*>(next(i));
@@ -472,4 +563,9 @@ bool parse_args(int argc, char** argv, ScanConfig& cfg) {
     }
     return true;
 }
+
+
+
+
+
 

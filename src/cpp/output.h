@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "../../include/netrox_abi.h"
+#include "../../include/netrox-asc_abh.h"
 
 void print_banner();
 void print_help();
@@ -29,3 +29,12 @@ void json_port(const PortResult& r);
 void json_footer(uint64_t elapsed_ms, int open_count, int filtered_count, int closed_count);
 void csv_header();
 void csv_port(const PortResult& r);
+
+void binary_open(const char* path, bool append);
+void binary_write(const PortResult& r, uint64_t scan_start_ts);
+void binary_close(uint32_t total_records);
+bool binary_readscan(const char* path, ScanConfig& cfg);
+
+
+
+

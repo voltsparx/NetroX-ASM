@@ -259,7 +259,12 @@ source_ip       resd 1
 sockaddr_tmp    resb 16
 sockaddr_local  resb 16
 addrlen         resd 1
+tx_ring_fd      resd 1
+tx_ring_ptr     resq 1
+tx_ring_frames  resd 1
+tx_ring_idx     resd 1
 
 %endif
+
 
 

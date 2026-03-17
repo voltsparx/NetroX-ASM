@@ -85,7 +85,39 @@ const char* scan_mode_name(uint8_t mode) {
     case SCAN_SEQ: return "seq";
     case SCAN_ICMP_TS: return "icmp-ts";
     case SCAN_ICMP_NM: return "icmp-nm";
-    case SCAN_ARP: return "arp";
+        case SCAN_ARP: return "arp";
+    case SCAN_NETBIOS: return "netbios";
+    case SCAN_MDNS: return "mdns";
+    case SCAN_SNMP: return "snmp";
+    case SCAN_SMB: return "smb";
+    case SCAN_SSL: return "ssl";
+    case SCAN_HTTP: return "http";
+    case SCAN_DNS: return "dns";
+    case SCAN_NTP: return "ntp";
+    case SCAN_REDIS: return "redis";
+    case SCAN_MEMCACHED: return "memcached";
+    case SCAN_DEEP: return "deep";
+    case SCAN_HEARTBLEED: return "heartbleed";
+    case SCAN_QUIC: return "quic";
+    case SCAN_MQTT: return "mqtt";
+    case SCAN_MODBUS: return "modbus";
+    case SCAN_S7: return "s7";
+    case SCAN_BACNET: return "bacnet";
+    case SCAN_UPNP: return "upnp";
+    case SCAN_TELNET: return "telnet";
+    case SCAN_VNC: return "vnc";
+    case SCAN_RDP: return "rdp";
+    case SCAN_AMQP: return "amqp";
+    case SCAN_MSSQL: return "mssql";
+    case SCAN_MYSQL: return "mysql";
+    case SCAN_POSTGRES: return "postgres";
+    case SCAN_MONGO: return "mongo";
+    case SCAN_ELASTIC: return "elastic";
+    case SCAN_LDAP: return "ldap";
+    case SCAN_KERBEROS: return "kerberos";
+    case SCAN_WINRM: return "winrm";
+    case SCAN_KAFKA: return "kafka";
+    case SCAN_DNP3: return "dnp3";
     default: return "unknown";
     }
 }
@@ -124,6 +156,30 @@ void print_help() {
         "  --system-dns        Use OS resolver\n"
         "  --traceroute        Trace hop path after scan\n\n"
         "SCAN TECHNIQUES:\n"
+        "PROTOCOL-SPECIFIC SCAN TYPES (new in v2):\n"
+        "  -sNB / --scan netbios    NetBIOS/NBNS name + workgroup (UDP 137)\n"
+        "  -sMD / --scan mdns       mDNS service discovery (224.0.0.251:5353)\n"
+        "  -sSN / --scan snmp       SNMP system description (UDP 161)\n"
+        "  -sSB / --scan smb        SMB version + signing detection (TCP 445)\n"
+        "  -sSL / --scan ssl        TLS fingerprint + cert info\n"
+        "  -sHT / --scan http       HTTP banner + server header\n"
+        "  -sDN / --scan dns        DNS version/AXFR/recursion probe\n"
+        "  -sNT / --scan ntp        NTP version + monlist check (UDP 123)\n"
+        "  -sRD / --scan redis      Redis open detection (TCP 6379)\n"
+        "  -sMC / --scan memcached  Memcached detection (TCP/UDP 11211)\n"
+        "  -sDP / --scan deep       Post-scan deep probe (--deep 1|2|3)\n"
+        "  -sHB / --scan heartbleed Heartbleed TLS vulnerability probe\n\n"
+        "PERFORMANCE FLAGS (new in v2):\n"
+        "  --tx-rx-split            Masscan TX/RX thread model (higher speed)\n"
+        "  --send-ring              PACKET_TX_RING kernel bypass (Linux)\n"
+        "  --shard <k>/<n>          Scan 1/N of target range (multi-machine)\n\n"
+        "OUTPUT FORMATS (new in v2):\n"
+        "  -oB <file>               Binary format (compact, masscan-compatible)\n"
+        "  -oL <file>               List format (one host:port per line)\n"
+        "  -oJ <file>               JSON to file\n"
+        "  --output-format <fmt>    text|json|csv|xml|binary|list\n"
+        "  --readscan <file>        Read binary scan file and output in any format\n\n"
+
         "  --scan syn          TCP SYN scan  (default, requires root)\n"
         "  --scan connect      TCP Connect scan (no root needed)\n"
         "  --scan ack          TCP ACK scan (firewall mapping)\n"
@@ -367,4 +423,11 @@ void print_bench(const ScanConfig&, uint64_t pps, uint64_t elapsed_ms) {
     out_uint(elapsed_ms);
     out_str(" ms\n");
 }
+
+
+
+
+
+
+
 

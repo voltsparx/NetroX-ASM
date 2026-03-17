@@ -13,6 +13,7 @@ global copy_iface_name
 global setup_send_engine
 global verify_iface
 global setup_sigint_handler
+global asm_setup_tx_ring
 global sigint_handler
 
 ; -------------------------------------------------------------------
@@ -293,6 +294,63 @@ sigint_handler:
 %include "../common/checksum.inc"
 %include "../common/intelligence.inc"
 
+
+; -------------------------------------------------------------------
+; asm_setup_tx_ring
+; rdi = ScanConfig*
+; -------------------------------------------------------------------
+asm_setup_tx_ring:
+    push rbx
+    mov  rbx, rdi
+
+    mov  eax, SYS_SOCKET
+    mov  edi, AF_PACKET
+    mov  esi, SOCK_RAW
+    mov  edx, ETH_P_ALL
+    syscall
+    test eax, eax
+    js   .ring_fail
+    mov  [tx_ring_fd], eax
+
+    sub  rsp, 16
+    mov  dword [rsp+0], 1048576
+    mov  dword [rsp+4], 16
+    mov  dword [rsp+8], 2048
+    mov  dword [rsp+12], 8192
+
+    mov  eax, SYS_SETSOCKOPT
+    mov  edi, [tx_ring_fd]
+    mov  esi, SOL_PACKET
+    mov  edx, PACKET_TX_RING
+    mov  r10, rsp
+    mov  r8d, 16
+    syscall
+    add  rsp, 16
+    test eax, eax
+    js   .ring_fail
+
+    mov  eax, 9
+    xor  edi, edi
+    mov  esi, 16777216
+    mov  edx, 3
+    mov  r10d, 1
+    mov  r8d, [tx_ring_fd]
+    xor  r9d, r9d
+    syscall
+    cmp  rax, -1
+    je   .ring_fail
+    mov  [tx_ring_ptr], rax
+    mov  dword [tx_ring_frames], 8192
+    xor  eax, eax
+    pop  rbx
+    ret
+
+.ring_fail:
+    neg  eax
+    pop  rbx
+    ret
 %endif
+
+
 
 
